@@ -158,6 +158,119 @@ namespace BrokerLedger.Infrastructure.Migrations
                     b.ToTable("journal_entries", (string)null);
                 });
 
+            modelBuilder.Entity("BrokerLedger.Infrastructure.OrderRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("BlockedAmount")
+                        .HasColumnType("numeric(20,2)")
+                        .HasColumnName("blocked_amount");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_id");
+
+                    b.Property<string>("ClientKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("client_key");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long?>("ExchangeOrderId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("exchange_order_id");
+
+                    b.Property<bool>("FundsBlocked")
+                        .HasColumnType("boolean")
+                        .HasColumnName("funds_blocked");
+
+                    b.Property<bool>("FundsReleased")
+                        .HasColumnType("boolean")
+                        .HasColumnName("funds_released");
+
+                    b.Property<decimal?>("LimitPrice")
+                        .HasColumnType("numeric(20,2)")
+                        .HasColumnName("limit_price");
+
+                    b.Property<long>("Quantity")
+                        .HasColumnType("bigint")
+                        .HasColumnName("quantity");
+
+                    b.Property<string>("RejectionReason")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("rejection_reason");
+
+                    b.Property<string>("Side")
+                        .IsRequired()
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)")
+                        .HasColumnName("side");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("status");
+
+                    b.Property<int>("SubmitAttempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("submit_attempts");
+
+                    b.Property<string>("Symbol")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasColumnName("symbol");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("type");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_orders");
+
+                    b.HasIndex("UpdatedAt")
+                        .HasDatabaseName("ix_orders_needing_attention")
+                        .HasFilter("status in ('Pending', 'Unknown') or (status = 'Rejected' and funds_blocked and not funds_released)");
+
+                    b.HasIndex("ClientId", "ClientKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_orders_client_id_client_key");
+
+                    b.HasIndex("ClientId", "CreatedAt")
+                        .HasDatabaseName("ix_orders_client_id_created_at");
+
+                    b.HasIndex("Symbol", "ExchangeOrderId")
+                        .HasDatabaseName("ix_orders_symbol_exchange_order_id");
+
+                    b.ToTable("orders", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_orders_quantity_positive", "quantity > 0");
+
+                            t.HasCheckConstraint("ck_orders_released_only_if_blocked", "not funds_released or funds_blocked");
+
+                            t.HasCheckConstraint("ck_orders_submit_attempts_not_negative", "submit_attempts >= 0");
+                        });
+                });
+
             modelBuilder.Entity("BrokerLedger.Infrastructure.PostingRow", b =>
                 {
                     b.Property<long>("Id")

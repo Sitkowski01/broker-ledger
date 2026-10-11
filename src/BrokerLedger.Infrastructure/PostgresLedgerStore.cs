@@ -52,6 +52,7 @@ internal sealed class PostgresLedgerStore(IDbContextFactory<LedgerDbContext> con
         // Nowe konta zakladamy w tej samej transakcji: odrzucony dokument nie zostawi pustych kont.
         // Zawsze w tej samej kolejnosci kluczy — dwa dokumenty zakladajace te same konta nie zakleszcza sie.
         var accountIds = new Dictionary<AccountId, long>();
+        // Stryker disable once Linq : kolejnosc malejaca tez jest stala, wiec tez chroni przed zakleszczeniem
         foreach (var account in entry.Postings.Select(p => p.Account).OrderBy(AccountKey.SortKey, StringComparer.Ordinal))
         {
             accountIds[account] = await EnsureAccountAsync(db, account, cancellationToken);

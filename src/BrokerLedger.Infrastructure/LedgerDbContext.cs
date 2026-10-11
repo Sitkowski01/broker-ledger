@@ -18,6 +18,7 @@ internal sealed class LedgerDbContext(DbContextOptions<LedgerDbContext> options)
     public DbSet<JournalEntryRow> JournalEntries => Set<JournalEntryRow>();
     public DbSet<PostingRow> Postings => Set<PostingRow>();
     public DbSet<ClientRow> Clients => Set<ClientRow>();
+    public DbSet<OrderRow> Orders => Set<OrderRow>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -61,6 +62,32 @@ internal sealed class LedgerDbContext(DbContextOptions<LedgerDbContext> options)
             client.Property(c => c.Email).HasMaxLength(EmailAddress.MaxLength);
             client.Property(c => c.PasswordHash).HasMaxLength(500);
             client.HasIndex(c => c.Email).IsUnique().HasDatabaseName(ClientEmailIndex);
+        });
+
+        modelBuilder.Entity<OrderRow>(order =>
+        {
+            order.Property(o => o.ClientKey).HasMaxLength(Order.MaxClientKeyLength);
+            order.Property(o => o.Symbol).HasMaxLength(12);
+            order.Property(o => o.Side).HasConversion<string>().HasMaxLength(4);
+            order.Property(o => o.Type).HasConversion<string>().HasMaxLength(8);
+            order.Property(o => o.Status).HasConversion<string>().HasMaxLength(16);
+            order.Property(o => o.LimitPrice).HasColumnType(AmountType);
+            order.Property(o => o.BlockedAmount).HasColumnType(AmountType);
+            order.Property(o => o.RejectionReason).HasMaxLength(200);
+            // Powtorka zadania z tym samym Idempotency-Key trafia na to samo zlecenie.
+            order.HasIndex(o => new { o.ClientId, o.ClientKey }).IsUnique();
+            order.HasIndex(o => new { o.ClientId, o.CreatedAt });
+            // Reconciler pyta tylko o niedokonczone zlecenia — maly indeks zamiast skanu calej historii.
+            order.HasIndex(o => o.UpdatedAt).HasDatabaseName("ix_orders_needing_attention")
+                .HasFilter("status in ('Pending', 'Unknown') or (status = 'Rejected' and funds_blocked and not funds_released)");
+            // Rozliczenie transakcji z gieldy szuka zlecenia po jej numerze.
+            order.HasIndex(o => new { o.Symbol, o.ExchangeOrderId });
+            order.ToTable(t =>
+            {
+                t.HasCheckConstraint("ck_orders_quantity_positive", "quantity > 0");
+                t.HasCheckConstraint("ck_orders_released_only_if_blocked", "not funds_released or funds_blocked");
+                t.HasCheckConstraint("ck_orders_submit_attempts_not_negative", "submit_attempts >= 0");
+            });
         });
     }
 }

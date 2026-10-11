@@ -47,3 +47,25 @@ internal sealed class ClientRow
     public required string PasswordHash { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 }
+
+internal sealed class OrderRow
+{
+    public Guid Id { get; set; }
+    public Guid ClientId { get; set; }
+    public required string ClientKey { get; set; }
+    public required string Symbol { get; set; }
+    public OrderSide Side { get; set; }
+    public OrderType Type { get; set; }
+    public decimal? LimitPrice { get; set; }
+    public long Quantity { get; set; }
+    public decimal BlockedAmount { get; set; }
+    public OrderStatus Status { get; set; }
+    public long? ExchangeOrderId { get; set; }
+    public string? RejectionReason { get; set; }
+    public bool FundsBlocked { get; set; }
+    public bool FundsReleased { get; set; }
+    public int SubmitAttempts { get; set; }
+    public int Version { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
