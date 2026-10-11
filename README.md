@@ -20,7 +20,7 @@ C# / .NET 10, ASP.NET Core (minimal API, JWT, rate limiting), EF Core + PostgreS
 | 2 | Księga podwójnego zapisu: dokumenty bilansujące się w każdym aktywie, saldo z zapisów, blokady | ✅ |
 | 3 | PostgreSQL (EF Core): historia nie do przepisania, idempotencja, saldo bez wyścigów i zakleszczeń, Testcontainers | ✅ |
 | 4 | API: rejestracja i JWT, wpłaty i wypłaty z kluczem idempotencji, salda, historia, rate limiting, testy e2e | ✅ |
-| 5 | Zlecenia: blokada środków → giełda → zwolnienie przy odrzuceniu (saga) | |
+| 5 | Zlecenia (saga): blokada → Parkiet z `clientOrderId` → przyjęcie albo zwolnienie; reconciler dla timeoutów | ✅ |
 | 6 | Rozliczenie transakcji z Kafki, odporne na powtórki | |
 | 7 | Portfel: pozycje, średnia cena, zysk/strata, kursy NBP | |
 
@@ -125,10 +125,51 @@ wypłata 100 zł        Wn ClientAvailable:PLN   100   │  Ma Bank:PLN         
   albo dodatnich limitów → `OptionsValidationException` przy uruchomieniu — **zanim** migracje dotkną bazy.
 - `/health` sprawdza połączenie z bazą — bez niej aplikacja nic nie zaksięguje.
 
+## Zlecenia na giełdę (saga)
+
+```
+POST /api/me/orders  {"symbol":"CDR","side":"buy","type":"limit","limitPrice":"250.00","quantity":10}
+  │
+  1. zapis zlecenia (Pending)                     orders, klucz (klient, Idempotency-Key)
+  2. blokada w księdze: 2500 zł + 9,75 zł prowizji  order:{id}:block
+  3. POST do Parkietu z clientOrderId = id zlecenia
+       201 / 200        → accepted (numer zlecenia na giełdzie)
+       400 / 404        → rejected → zwolnienie blokady   order:{id}:release
+       503 (1. próba)   → rejected → zwolnienie blokady
+       504 / timeout    → unknown, blokada zostaje → wyjaśnia reconciler
+```
+
+- **Każdy krok jest idempotentny** — w księdze klucz, na giełdzie `clientOrderId` (Parkiet zwraca pierwotny
+  wynik zamiast składać zlecenie drugi raz). Awaria w dowolnym miejscu jest do dokończenia: **reconciler**
+  co kilka sekund bierze zlecenia `pending` / `unknown` i odrzucone z niezwolnioną blokadą i powtarza sagę.
+- **Najpierw status, potem pieniądze.** Status zlecenia jest zapisywany przed zwolnieniem blokady — po awarii
+  nigdy nie zwolnimy środków zlecenia, które mogło trafić na giełdę.
+- **Licznik prób zapisany przed wysłaniem.** 503 jest odmową tylko przy pierwszej próbie — po timeoucie, awarii
+  albo rozłączonym kliencie wcześniejsza próba mogła wciąż czekać w kolejce giełdy i wykonać się później,
+  więc zwolnienie środków byłoby błędem. Ten sam zapis działa jak dzierżawa: gdy zlecenie chcą wysłać naraz
+  żądanie klienta i reconciler, drugi przegra wyścig o wersję i niczego nie wyśle.
+- **409 z giełdy** (`clientOrderId` zajęty innym zleceniem) nie zwalnia środków — zostaje do wyjaśnienia.
+- **Kupno PKC nie przechodzi** — bez limitu ceny nie wiadomo, ile zablokować. Sprzedaż PKC blokuje akcje.
+- **Prowizja** 0,39%, min. 3 zł, w górę do grosza; przy kupnie blokowana razem z wartością.
+- **Blokada optymistyczna** (wersja zlecenia): żądanie klienta i reconciler nie nadpiszą sobie stanu.
+- **Anulowanie** (`DELETE /api/me/orders/{id}`) to prośba do giełdy → `cancelrequested`. Środki zwolni
+  zdarzenie anulowania z Kafki — dopiero ono mówi, ile zlecenia zdążyło się zrealizować.
+- **Po przyjęciu liczy się już tylko giełda.** Transakcje, reszta PKC anulowana z braku ofert i pełna realizacja
+  przychodzą jako zdarzenia z Kafki — rozliczenie i zwolnienie reszty blokady to etap 6.
+
+| Odpowiedź | Kiedy |
+|---|---|
+| 201 | zlecenie przyjęte przez giełdę |
+| 202 | giełda nie odpowiedziała — zlecenie żyje, środki zablokowane, wyjaśnia się w tle |
+| 200 | powtórka żądania z tym samym `Idempotency-Key` — to samo zlecenie |
+| 409 | ten sam klucz z innym zleceniem / anulowanie zlecenia, które nie jest otwarte |
+| 422 | odrzucone: brak środków albo odmowa giełdy (powód w `rejectionReason`) |
+
 ## Uruchomienie
 
 ```bash
 docker compose up -d                          # PostgreSQL na porcie 5434
+# zlecenia ida do gieldy Parkiet: Exchange:BaseUrl (domyslnie http://localhost:8090/)
 dotnet run --project src/BrokerLedger.Api     # http://localhost:8091, migracje przy starcie (Development)
 
 curl -X POST localhost:8091/api/auth/register -H 'Content-Type: application/json' \
@@ -166,6 +207,9 @@ dotnet stryker -f stryker-api.json              # testy mutacyjne API na testach
 | Różnicowe | ten sam losowy ciąg operacji na księdze w pamięci i w PostgreSQL — te same decyzje i salda |
 | E2E (API) | cała aplikacja (`WebApplicationFactory`) na prawdziwym PostgreSQL: rejestracja i logowanie, sfałszowane i wygasłe tokeny, wpłata → wypłata → salda → historia ze stronicowaniem, powtórki i konflikty kluczy, walidacja, 10 równoległych wypłat po HTTP, limity 429, start z błędną konfiguracją, health bez bazy |
 | Architektura (API) | warstwa web nie zależy od EF Core ani Npgsql — rozmawia z księgą tylko przez porty domeny |
+| Saga (jednostkowe) | każda ścieżka zlecenia na atrapach: brak środków, odmowa, 503 przy pierwszej próbie i po timeoucie, awaria przed zapisem blokady i przed zwolnieniem — dokończona bez dublowania, nieaktualna kopia nie nadpisze stanu |
+| E2E zleceń | HTTP → księga w PostgreSQL → Parkiet w pamięci z awariami na życzenie: 504 mimo przyjęcia, cisza, błąd sieci → reconciler wyjaśnia, na giełdzie zawsze jedno zlecenie |
+| Klient giełdy | mapowanie kodów HTTP Parkietu na decyzje sagi, format zlecenia, zepsuty JSON, anulowanie przez wołającego ≠ timeout |
 | Mutacyjne | Stryker psuje kod i sprawdza, czy testy to wykryją — osobno domena, warstwa bazy i API |
 
 Na Windowsie z zainstalowanym Visual Studio 2022 Stryker bierze jego starszy MSBuild, który nie zna
