@@ -50,6 +50,12 @@ public sealed class ProxyAndErrorTests(BrokerApi api)
     [InlineData("ConnectionStrings:Ledger", "", "ConnectionStrings:Ledger is not configured")]
     [InlineData("Jwt:SigningKey", "too-short", "a SigningKey of at least 32 bytes")]
     [InlineData("RateLimits:AuthPerMinute", "0", "RateLimits must be positive")]
+    [InlineData("Exchange:BaseUrl", "", "Exchange:BaseUrl and a positive Exchange:Timeout are required")]
+    [InlineData("Exchange:Timeout", "00:00:00", "Exchange:BaseUrl and a positive Exchange:Timeout are required")]
+    [InlineData("Orders:Reconciler:Interval", "00:00:00", "Orders:Reconciler needs a positive Interval and BatchSize")]
+    [InlineData("Orders:Reconciler:MinAge", "00:00:00.200", "Orders:Reconciler:MinAge must be longer than Exchange:Timeout")]
+    [InlineData("Exchange:BaseUrl", "http://gw/parkiet", "Exchange:BaseUrl must be an absolute URL ending with")]
+    [InlineData("Exchange:BaseUrl", "parkiet/", "Exchange:BaseUrl must be an absolute URL ending with")]
     public void Bad_configuration_names_the_problem(string key, string value, string message)
     {
         using var broken = api.With((key, value));

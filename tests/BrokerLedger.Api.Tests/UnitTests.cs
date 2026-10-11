@@ -157,4 +157,18 @@ public class UnitTests
     {
         public override DateTimeOffset GetUtcNow() => now;
     }
+
+    [Fact]
+    public async Task Concurrent_change_of_an_order_is_a_conflict()
+    {
+        var writer = new NoProblemWriter();
+        var http = new DefaultHttpContext();
+
+        var handled = await new LedgerExceptionHandler(writer)
+            .TryHandleAsync(http, new OrderConcurrencyException(OrderId.New()), CancellationToken.None);
+
+        Assert.True(handled);
+        Assert.Equal(StatusCodes.Status409Conflict, http.Response.StatusCode);
+        Assert.Equal("Order was changed at the same time, read it again", writer.Last!.ProblemDetails.Title);
+    }
 }
