@@ -54,4 +54,11 @@ public sealed class LedgerInfrastructureTests(PostgresFixture postgres)
         await using var provider = services.BuildServiceProvider();
         return await provider.GetRequiredService<HealthCheckService>().CheckHealthAsync();
     }
+
+    [Fact]
+    public void Exchange_client_needs_an_address_and_a_positive_timeout()
+    {
+        Assert.Throws<ArgumentNullException>(() => new ServiceCollection().AddParkietExchange(null!, TimeSpan.FromSeconds(1)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new ServiceCollection().AddParkietExchange(new Uri("http://x/"), TimeSpan.Zero));
+    }
 }
