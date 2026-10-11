@@ -23,6 +23,10 @@ internal sealed class LedgerExceptionHandler(IProblemDetailsService problems) : 
                     ["asset"] = e.Account.Asset.Code,
                     ["available"] = Amounts.Format(e.Balance, e.Account.Asset),
                 }),
+            OrderConcurrencyException => (
+                StatusCodes.Status409Conflict,
+                "Order was changed at the same time, read it again",
+                new Dictionary<string, object?>()),
             IdempotencyConflictException => (
                 StatusCodes.Status409Conflict,
                 "Idempotency-Key was already used for a different operation",

@@ -15,6 +15,14 @@ internal static class AccountEndpoints
     /// <summary>Gielda Parkiet handluje w zlotowkach, wiec rachunki gotowkowe sa tylko w PLN.</summary>
     public static readonly IReadOnlyList<Currency> SupportedCurrencies = [Currency.Pln];
 
+    public const string KeyError =
+        "header Idempotency-Key with 1-100 printable ASCII characters is required";
+
+    /// <summary>Klucz od klienta: 1-100 drukowalnych znakow ASCII (bez spacji).</summary>
+    public static bool IsValidKey(string? key) =>
+        // Stryker disable once Equality : pusty naglowek dochodzi jako null, wiec "Length >= 0" dziala tak samo
+        key is { Length: > 0 and <= MaxIdempotencyKeyLength } && !key.Any(c => c is < '!' or > '~');
+
     public static IEndpointRouteBuilder MapAccountEndpoints(this IEndpointRouteBuilder app)
     {
         var me = app.MapGroup("/api/me").RequireAuthorization().RequireRateLimiting(RateLimits.Client);
@@ -50,10 +58,9 @@ internal static class AccountEndpoints
         ILedgerStore ledger, CancellationToken ct)
     {
         var errors = new Dictionary<string, string[]>();
-        // Stryker disable once Equality : pusty naglowek dochodzi jako null, wiec "Length >= 0" dziala tak samo
-        if (key is not { Length: > 0 and <= MaxIdempotencyKeyLength } || key.Any(c => c is < '!' or > '~'))
+        if (!IsValidKey(key))
         {
-            errors[IdempotencyHeader] = [$"header {IdempotencyHeader} with 1-{MaxIdempotencyKeyLength} printable ASCII characters is required"];
+            errors[IdempotencyHeader] = [KeyError];
         }
         var money = TryMoney(body, errors);
         if (money is null || errors.Count > 0)
