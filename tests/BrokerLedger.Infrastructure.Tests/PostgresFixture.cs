@@ -82,6 +82,8 @@ public sealed class TestDatabase(string connectionString) : IAsyncDisposable
 
     internal PostgresLedgerQueries Queries() => new(_contexts);
 
+    internal PostgresOrderRepository Orders(TimeProvider? clock = null) => new(_contexts, clock ?? TimeProvider.System);
+
     internal LedgerDbContext Context() => _contexts.CreateDbContext();
 
     public async Task<int> ExecuteAsync(string sql)
