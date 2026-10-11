@@ -36,6 +36,14 @@ public sealed class PostgresFixture : IAsyncLifetime
         return new TestDatabase(ConnectionString(name));
     }
 
+    /// <summary>Pusta baza bez migracji — do testow samych migracji.</summary>
+    public async Task<TestDatabase> CreateEmptyDatabaseAsync()
+    {
+        var name = $"empty_{Guid.NewGuid():N}";
+        await ExecuteAsync($"CREATE DATABASE {name}");
+        return new TestDatabase(ConnectionString(name));
+    }
+
     public Task DisposeAsync() => _container.DisposeAsync().AsTask();
 
     internal static DbContextOptions<LedgerDbContext> Options(string connectionString) =>
@@ -62,11 +70,17 @@ public sealed class SharedPostgres : ICollectionFixture<PostgresFixture>
 /// <summary>Swieza baza jednego testu: ksiega, kontrola i surowy SQL do psucia danych.</summary>
 public sealed class TestDatabase(string connectionString) : IAsyncDisposable
 {
+    public string ConnectionString => connectionString;
+
     private readonly PooledDbContextFactory<LedgerDbContext> _contexts = new(PostgresFixture.Options(connectionString));
 
     internal PostgresLedgerStore Store(TimeProvider? clock = null) => new(_contexts, clock ?? TimeProvider.System);
 
     internal LedgerAudit Audit => new(_contexts);
+
+    internal PostgresClientRepository Clients() => new(_contexts, TimeProvider.System);
+
+    internal PostgresLedgerQueries Queries() => new(_contexts);
 
     internal LedgerDbContext Context() => _contexts.CreateDbContext();
 
