@@ -3,6 +3,9 @@ namespace BrokerLedger.Domain;
 /// <summary>Jeden zapis: konto, strona i kwota (zawsze dodatnia — kierunek mowi strona).</summary>
 public sealed record Posting
 {
+    /// <summary>Bilion na jeden zapis — wiecej to pomylka, nie zlecenie. Saldo tez ma gorny limit w bazie.</summary>
+    public const decimal MaxAmount = 1_000_000_000_000m;
+
     public AccountId Account { get; }
     public PostingSide Side { get; }
     public decimal Amount { get; }
@@ -10,9 +13,9 @@ public sealed record Posting
     public Posting(AccountId account, PostingSide side, decimal amount)
     {
         ArgumentNullException.ThrowIfNull(account);
-        if (amount <= 0m)
+        if (amount is <= 0m or > MaxAmount)
         {
-            throw new ArgumentException($"amount must be positive, got {amount}", nameof(amount));
+            throw new ArgumentException($"amount must be positive and at most {MaxAmount}, got {amount}", nameof(amount));
         }
         if (!account.Asset.Fits(amount))
         {

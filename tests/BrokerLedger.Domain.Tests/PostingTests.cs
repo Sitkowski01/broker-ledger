@@ -38,4 +38,13 @@ public class PostingTests
 
     [Fact]
     public void Requires_an_account() => Assert.Throws<ArgumentNullException>(() => Posting.Debit(null!, 1m));
+
+    [Fact]
+    public void Amount_has_an_upper_limit()
+    {
+        Assert.Equal(Posting.MaxAmount, Posting.Debit(Bank, Posting.MaxAmount).Amount);
+
+        var ex = Assert.Throws<ArgumentException>(() => Posting.Debit(Bank, Posting.MaxAmount + 0.01m));
+        Assert.Contains("at most 1000000000000", ex.Message, StringComparison.Ordinal);
+    }
 }

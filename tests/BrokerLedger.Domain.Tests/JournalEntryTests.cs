@@ -107,4 +107,80 @@ public class JournalEntryTests
         Assert.Equal("postings", ex.ParamName);
         Assert.Contains("must not contain null", ex.Message, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void Same_content_ignores_posting_order()
+    {
+        var entry = new JournalEntry("x", Posting.Debit(Bank, 1m), Posting.Credit(Cash, 1m));
+
+        Assert.True(entry.HasSameContentAs(new JournalEntry("x", Posting.Credit(Cash, 1.00m), Posting.Debit(Bank, 1m))));
+        Assert.False(entry.HasSameContentAs(new JournalEntry("y", Posting.Debit(Bank, 1m), Posting.Credit(Cash, 1m))));
+        Assert.False(entry.HasSameContentAs(new JournalEntry("x", Posting.Debit(Bank, 2m), Posting.Credit(Cash, 2m))));
+        Assert.False(entry.HasSameContentAs(new JournalEntry("x", Posting.Debit(Bank, 1m), Posting.Credit(Fees, 1m))));
+        Assert.Throws<ArgumentNullException>(() => entry.HasSameContentAs(null!));
+    }
+
+    [Fact]
+    public void Same_content_needs_the_same_number_of_postings()
+    {
+        var two = new JournalEntry("x", Posting.Debit(Bank, 2m), Posting.Credit(Cash, 2m));
+        var three = new JournalEntry("x", Posting.Debit(Bank, 2m), Posting.Credit(Cash, 1m), Posting.Credit(Fees, 1m));
+
+        Assert.False(two.HasSameContentAs(three));
+        Assert.False(three.HasSameContentAs(two));
+    }
+
+    [Fact]
+    public void Idempotency_conflict_names_the_key()
+    {
+        var ex = new IdempotencyConflictException("transfer-77");
+
+        Assert.Equal("transfer-77", ex.IdempotencyKey);
+        Assert.Equal("idempotency key 'transfer-77' was already used for a different entry", ex.Message);
+    }
+
+    [Fact]
+    public void Description_has_a_length_limit()
+    {
+        var ok = new JournalEntry(new string('x', JournalEntry.MaxDescriptionLength), Posting.Debit(Bank, 1m), Posting.Credit(Cash, 1m));
+        Assert.Equal(200, ok.Description.Length);
+
+        var ex = Assert.Throws<ArgumentException>(() =>
+            new JournalEntry(new string('x', 201), Posting.Debit(Bank, 1m), Posting.Credit(Cash, 1m)));
+        Assert.Equal("description", ex.ParamName);
+        Assert.Contains("at most 200 characters", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Shortfall_names_the_client_account_before_the_brokers()
+    {
+        // Brakuje i w banku (pierwszy zapis), i u klienta — odmowa dotyczy klienta, wiec jego konto idzie pierwsze.
+        var withdrawal = new JournalEntry("withdrawal", Posting.Credit(Bank, 5m), Posting.Debit(Cash, 5m));
+
+        var ex = Assert.Throws<InsufficientBalanceException>(() => withdrawal.EnsureNoAccountGoesNegative(_ => 0m));
+
+        Assert.Equal(Cash, ex.Account);
+    }
+
+    [Fact]
+    public void Shortfall_on_several_client_accounts_follows_document_order()
+    {
+        var cdrBlocked = AccountId.Blocked(Client, Asset.Shares("CDR"));
+        var swap = new JournalEntry("swap",
+            Posting.Debit(Shares, 1m), Posting.Credit(cdrBlocked, 1m),
+            Posting.Debit(Cash, 1m), Posting.Credit(Bank, 1m));
+
+        var ex = Assert.Throws<InsufficientBalanceException>(() => swap.EnsureNoAccountGoesNegative(_ => 0m));
+
+        Assert.Equal(Shares, ex.Account);
+    }
+
+    [Fact]
+    public void No_shortfall_when_every_account_has_enough()
+    {
+        var withdrawal = new JournalEntry("withdrawal", Posting.Credit(Bank, 5m), Posting.Debit(Cash, 5m));
+
+        withdrawal.EnsureNoAccountGoesNegative(_ => 5m);
+        Assert.Throws<ArgumentNullException>(() => withdrawal.EnsureNoAccountGoesNegative(null!));
+    }
 }

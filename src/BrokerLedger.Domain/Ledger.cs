@@ -25,14 +25,7 @@ public sealed class Ledger
     public void Post(JournalEntry entry)
     {
         ArgumentNullException.ThrowIfNull(entry);
-        foreach (var posting in entry.Postings)
-        {
-            var balance = Balance(posting.Account);
-            if (balance + posting.BalanceChange < 0m)
-            {
-                throw new InsufficientBalanceException(posting.Account, balance, posting.Amount);
-            }
-        }
+        entry.EnsureNoAccountGoesNegative(Balance);
 
         _entries.Add(entry);
         foreach (var posting in entry.Postings)

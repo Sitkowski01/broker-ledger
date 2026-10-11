@@ -6,12 +6,18 @@ namespace BrokerLedger.Domain;
 /// </summary>
 public sealed class JournalEntry
 {
+    public const int MaxDescriptionLength = 200;
+
     public string Description { get; }
     public IReadOnlyList<Posting> Postings { get; }
 
     public JournalEntry(string description, IEnumerable<Posting> postings)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(description);
+        if (description.Length > MaxDescriptionLength)
+        {
+            throw new ArgumentException($"description must be at most {MaxDescriptionLength} characters", nameof(description));
+        }
         ArgumentNullException.ThrowIfNull(postings);
         var list = postings.ToList();
         if (list.Any(p => p is null))
@@ -41,6 +47,32 @@ public sealed class JournalEntry
 
         Description = description;
         Postings = list.AsReadOnly();
+    }
+
+    /// <summary>Ten sam opis i te same zapisy, w dowolnej kolejnosci — po tym poznajemy powtorke.</summary>
+    public bool HasSameContentAs(JournalEntry other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+        // Konto wystepuje w dokumencie najwyzej raz, wiec porownanie zbiorow wystarcza.
+        return Description == other.Description && Postings.ToHashSet().SetEquals(other.Postings);
+    }
+
+    /// <summary>
+    /// Rzuca <see cref="InsufficientBalanceException"/>, gdy po tym dokumencie ktores konto zeszloby ponizej zera.
+    /// Gdy brakuje na kilku, zglasza najpierw konto klienta (to jego dotyczy odmowa), potem brokera,
+    /// w kolejnosci zapisow. Ta sama regula w pamieci i w bazie — obie ksiegi zglaszaja to samo konto.
+    /// </summary>
+    public void EnsureNoAccountGoesNegative(Func<AccountId, decimal> balanceOf)
+    {
+        ArgumentNullException.ThrowIfNull(balanceOf);
+        foreach (var posting in Postings.OrderBy(p => p.Account.IsClientAccount ? 0 : 1))
+        {
+            var balance = balanceOf(posting.Account);
+            if (balance + posting.BalanceChange < 0m)
+            {
+                throw new InsufficientBalanceException(posting.Account, balance, posting.Amount);
+            }
+        }
     }
 
     public JournalEntry(string description, params Posting[] postings)
