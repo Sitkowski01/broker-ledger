@@ -20,6 +20,10 @@ internal sealed class AccountRow
 internal sealed class JournalEntryRow
 {
     public Guid Id { get; set; }
+
+    /// <summary>Kolejnosc zaksiegowania (identity) — po niej historia sortuje i stronicuje.</summary>
+    public long Sequence { get; set; }
+
     public required string IdempotencyKey { get; set; }
     public required string Description { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
@@ -34,4 +38,12 @@ internal sealed class PostingRow
     public AccountRow Account { get; set; } = null!;
     public PostingSide Side { get; set; }
     public decimal Amount { get; set; }
+}
+
+internal sealed class ClientRow
+{
+    public Guid Id { get; set; }
+    public required string Email { get; set; }
+    public required string PasswordHash { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
 }

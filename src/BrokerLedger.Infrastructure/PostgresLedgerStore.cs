@@ -47,24 +47,25 @@ internal sealed class PostgresLedgerStore(IDbContextFactory<LedgerDbContext> con
     private async Task PostNewAsync(string idempotencyKey, JournalEntry entry, CancellationToken cancellationToken)
     {
         await using var db = await contexts.CreateDbContextAsync(cancellationToken);
-        // Konta zakladamy poza transakcja: puste konto niczego nie psuje, a krotkie osobne
-        // INSERT-y nie trzymaja blokad do konca ksiegowania.
-        var accountIds = new Dictionary<AccountId, long>();
-        foreach (var posting in entry.Postings)
-        {
-            accountIds[posting.Account] = await EnsureAccountAsync(db, posting.Account, cancellationToken);
-        }
-
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+
+        // Nowe konta zakladamy w tej samej transakcji: odrzucony dokument nie zostawi pustych kont.
+        // Zawsze w tej samej kolejnosci kluczy — dwa dokumenty zakladajace te same konta nie zakleszcza sie.
+        var accountIds = new Dictionary<AccountId, long>();
+        foreach (var account in entry.Postings.Select(p => p.Account).OrderBy(AccountKey.SortKey, StringComparer.Ordinal))
+        {
+            accountIds[account] = await EnsureAccountAsync(db, account, cancellationToken);
+        }
 
         // Najpierw dokument. Rownolegla powtorka z tym samym kluczem czeka tu na pierwsza
         // i dostaje naruszenie UNIQUE, zanim dotknie sald — nie zobaczy np. "brak srodkow".
+        var now = clock.GetUtcNow();
         db.JournalEntries.Add(new JournalEntryRow
         {
-            Id = Guid.CreateVersion7(),
+            Id = Guid.CreateVersion7(now),
             IdempotencyKey = idempotencyKey,
             Description = entry.Description,
-            CreatedAt = clock.GetUtcNow(),
+            CreatedAt = now,
             Postings = entry.Postings
                 .Select(p => new PostingRow { AccountId = accountIds[p.Account], Side = p.Side, Amount = p.Amount })
                 .ToList(),

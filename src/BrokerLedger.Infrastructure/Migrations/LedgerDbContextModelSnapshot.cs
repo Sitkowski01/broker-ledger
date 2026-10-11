@@ -66,6 +66,9 @@ namespace BrokerLedger.Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("pk_accounts");
 
+                    b.HasIndex("ClientId")
+                        .HasDatabaseName("ix_accounts_client_id");
+
                     b.HasIndex("Type", "AssetKind", "AssetCode", "ClientId")
                         .IsUnique()
                         .HasDatabaseName("ix_accounts_type_asset_kind_asset_code_client_id");
@@ -76,6 +79,39 @@ namespace BrokerLedger.Infrastructure.Migrations
                         {
                             t.HasCheckConstraint("ck_accounts_balance_not_negative", "balance >= 0");
                         });
+                });
+
+            modelBuilder.Entity("BrokerLedger.Infrastructure.ClientRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)")
+                        .HasColumnName("email");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("password_hash");
+
+                    b.HasKey("Id")
+                        .HasName("pk_clients");
+
+                    b.HasIndex("Email")
+                        .IsUnique()
+                        .HasDatabaseName("ix_clients_email");
+
+                    b.ToTable("clients", (string)null);
                 });
 
             modelBuilder.Entity("BrokerLedger.Infrastructure.JournalEntryRow", b =>
@@ -101,12 +137,23 @@ namespace BrokerLedger.Infrastructure.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("idempotency_key");
 
+                    b.Property<long>("Sequence")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("sequence");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Sequence"));
+
                     b.HasKey("Id")
                         .HasName("pk_journal_entries");
 
                     b.HasIndex("IdempotencyKey")
                         .IsUnique()
                         .HasDatabaseName("ix_journal_entries_idempotency_key");
+
+                    b.HasIndex("Sequence")
+                        .IsUnique()
+                        .HasDatabaseName("ix_journal_entries_sequence");
 
                     b.ToTable("journal_entries", (string)null);
                 });

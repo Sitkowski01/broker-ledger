@@ -11,9 +11,13 @@ internal sealed class LedgerDbContext(DbContextOptions<LedgerDbContext> options)
     /// <summary>Po tej nazwie PostgresLedgerStore rozpoznaje powtorke — dlatego nadana jawnie.</summary>
     public const string IdempotencyIndex = "ix_journal_entries_idempotency_key";
 
+    /// <summary>Po tej nazwie rejestracja rozpoznaje zajety e-mail.</summary>
+    public const string ClientEmailIndex = "ix_clients_email";
+
     public DbSet<AccountRow> Accounts => Set<AccountRow>();
     public DbSet<JournalEntryRow> JournalEntries => Set<JournalEntryRow>();
     public DbSet<PostingRow> Postings => Set<PostingRow>();
+    public DbSet<ClientRow> Clients => Set<ClientRow>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -27,6 +31,8 @@ internal sealed class LedgerDbContext(DbContextOptions<LedgerDbContext> options)
             // Konto domu maklerskiego nie ma klienta (NULL) — mimo to ma byc jedno, stad NULLS NOT DISTINCT.
             account.HasIndex(a => new { a.Type, a.AssetKind, a.AssetCode, a.ClientId })
                 .IsUnique().AreNullsDistinct(false);
+            // Salda i historia klienta szukaja kont po kliencie — bez tego skan calej tabeli.
+            account.HasIndex(a => a.ClientId);
             // Ostatnia linia obrony: nawet blad w kodzie nie zapisze ujemnego salda.
             account.ToTable(t => t.HasCheckConstraint("ck_accounts_balance_not_negative", "balance >= 0"));
         });
@@ -36,6 +42,8 @@ internal sealed class LedgerDbContext(DbContextOptions<LedgerDbContext> options)
             entry.Property(e => e.IdempotencyKey).HasMaxLength(ILedgerStore.MaxIdempotencyKeyLength);
             entry.Property(e => e.Description).HasMaxLength(JournalEntry.MaxDescriptionLength);
             entry.HasIndex(e => e.IdempotencyKey).IsUnique().HasDatabaseName(IdempotencyIndex);
+            entry.Property(e => e.Sequence).UseIdentityAlwaysColumn();
+            entry.HasIndex(e => e.Sequence).IsUnique();
             entry.HasMany(e => e.Postings).WithOne().HasForeignKey(p => p.EntryId).OnDelete(DeleteBehavior.Restrict);
         });
 
@@ -46,6 +54,13 @@ internal sealed class LedgerDbContext(DbContextOptions<LedgerDbContext> options)
             posting.HasOne(p => p.Account).WithMany().HasForeignKey(p => p.AccountId).OnDelete(DeleteBehavior.Restrict);
             posting.HasIndex(p => new { p.EntryId, p.AccountId }).IsUnique();
             posting.ToTable(t => t.HasCheckConstraint("ck_postings_amount_positive", "amount > 0"));
+        });
+
+        modelBuilder.Entity<ClientRow>(client =>
+        {
+            client.Property(c => c.Email).HasMaxLength(EmailAddress.MaxLength);
+            client.Property(c => c.PasswordHash).HasMaxLength(500);
+            client.HasIndex(c => c.Email).IsUnique().HasDatabaseName(ClientEmailIndex);
         });
     }
 }

@@ -8,6 +8,10 @@ internal sealed record AccountKey(AccountType Type, AssetKind AssetKind, string 
     public static AccountKey Of(AccountId account) =>
         new(account.Type, account.Asset.Kind, account.Asset.Code, account.Client?.Value, account.NormalSide);
 
+    /// <summary>Stala kolejnosc zakladania kont — ta sama w kazdej transakcji.</summary>
+    public static string SortKey(AccountId account) =>
+        $"{account.Type}|{account.Asset.Kind}|{account.Asset.Code}|{account.Client}";
+
     public static AccountId ToAccountId(AccountRow row)
     {
         var asset = row.AssetKind == AssetKind.Cash ? Asset.Cash(new Currency(row.AssetCode)) : Asset.Shares(row.AssetCode);
