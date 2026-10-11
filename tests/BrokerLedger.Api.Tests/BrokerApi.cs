@@ -5,7 +5,10 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using BrokerLedger.Api.Orders;
+using BrokerLedger.Domain;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Testcontainers.PostgreSql;
 
 namespace BrokerLedger.Api.Tests;
@@ -19,6 +22,16 @@ public sealed class BrokerApi : WebApplicationFactory<Program>, IAsyncLifetime
     public const string SigningKey = "test-signing-key-at-least-32-bytes-long";
 
     private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:17-alpine").Build();
+
+    /// <summary>Gielda, z ktora rozmawia broker w testach — w pamieci, z awariami na zyczenie.</summary>
+    public FakeParkiet Parkiet { get; } = new();
+
+    /// <summary>Jeden przebieg reconcilera — w testach wylaczonego, zeby wynik nie zalezal od zegara.</summary>
+    internal async Task<int> ReconcileAsync()
+    {
+        await Task.Delay(TimeSpan.FromMilliseconds(400));
+        return await Services.GetServices<IHostedService>().OfType<OrderReconciler>().Single().RunOnceAsync();
+    }
 
     public async Task InitializeAsync()
     {
@@ -84,6 +97,13 @@ public sealed class BrokerApi : WebApplicationFactory<Program>, IAsyncLifetime
         // Wszystkie testy ida z jednego "adresu IP" — limit logowan podniesiony, sprawdza go osobny test.
         builder.UseSetting("RateLimits:AuthPerMinute", "100000");
         builder.UseSetting("RateLimits:ClientPerMinute", "100000");
+        builder.UseSetting("Exchange:BaseUrl", "http://parkiet.test/");
+        builder.UseSetting("Orders:Reconciler:Enabled", "false");
+        // Reconciler bierze tylko zlecenia starsze niz timeout gieldy — w testach oba sa krotkie.
+        builder.UseSetting("Exchange:Timeout", "00:00:00.200");
+        builder.UseSetting("Orders:Reconciler:MinAge", "00:00:00.300");
+        builder.ConfigureServices(services =>
+            services.AddHttpClient(nameof(IExchange)).ConfigurePrimaryHttpMessageHandler(Parkiet.Handler));
     }
 }
 
@@ -125,4 +145,8 @@ internal static class Clients
 
     public static async Task<JsonElement> JsonAsync(this HttpResponseMessage response) =>
         await response.Content.ReadFromJsonAsync<JsonElement>();
+
+    /// <summary>Id klienta zalogowanego klientem HTTP — z tokenu, jak robi to API.</summary>
+    public static ClientId ClientIdOf(HttpClient http) =>
+        new(Guid.Parse(new Microsoft.IdentityModel.JsonWebTokens.JsonWebToken(http.DefaultRequestHeaders.Authorization!.Parameter!).Subject));
 }
