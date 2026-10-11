@@ -3,6 +3,7 @@ using BrokerLedger.Api;
 using BrokerLedger.Api.Accounts;
 using BrokerLedger.Api.Auth;
 using BrokerLedger.Api.Errors;
+using BrokerLedger.Api.Orders;
 using BrokerLedger.Infrastructure;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Options;
@@ -19,6 +20,7 @@ builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<LedgerExceptionHandler>();
 builder.Services.AddBrokerAuth(builder.Configuration);
 builder.Services.AddBrokerRateLimits(builder.Configuration);
+builder.Services.AddBrokerOrders(builder.Configuration);
 builder.Services.AddHealthChecks().AddLedgerDatabaseCheck();
 // Za reverse proxy adres klienta jest w X-Forwarded-For. Ufamy tylko proxy z konfiguracji
 // (domyslnie localhost) — inaczej kazdy moglby podac dowolny adres i ominac limit logowan.
@@ -52,5 +54,6 @@ app.UseRateLimiter();
 app.MapHealthChecks("/health");
 app.MapAuthEndpoints();
 app.MapAccountEndpoints();
+app.MapOrderEndpoints();
 
 await app.RunAsync();
