@@ -16,6 +16,23 @@ public static class LedgerInfrastructure
         services.AddSingleton<ILedgerStore, PostgresLedgerStore>();
         services.AddSingleton<ILedgerQueries, PostgresLedgerQueries>();
         services.AddSingleton<IClientRepository, PostgresClientRepository>();
+        services.AddSingleton<IOrderRepository, PostgresOrderRepository>();
+        return services;
+    }
+
+    /// <summary>
+    /// Klient gieldy Parkiet. Bez automatycznych ponowien w HttpClient: ponawianie zlecen nalezy do sagi
+    /// (z tym samym clientOrderId), nie do warstwy HTTP, ktora nie wie, czy zlecenie juz weszlo.
+    /// </summary>
+    public static IServiceCollection AddParkietExchange(this IServiceCollection services, Uri baseUrl, TimeSpan timeout)
+    {
+        ArgumentNullException.ThrowIfNull(baseUrl);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(timeout, TimeSpan.Zero);
+        services.AddHttpClient<IExchange, ParkietExchange>(http =>
+        {
+            http.BaseAddress = baseUrl;
+            http.Timeout = timeout;
+        });
         return services;
     }
 
