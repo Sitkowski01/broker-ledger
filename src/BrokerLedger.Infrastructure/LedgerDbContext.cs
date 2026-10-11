@@ -1,0 +1,51 @@
+using BrokerLedger.Domain;
+using Microsoft.EntityFrameworkCore;
+
+namespace BrokerLedger.Infrastructure;
+
+internal sealed class LedgerDbContext(DbContextOptions<LedgerDbContext> options) : DbContext(options)
+{
+    // Do grosza; 18 cyfr przed przecinkiem to milion zapisow po Posting.MaxAmount. Akcje (sztuki) tez sie mieszcza.
+    private const string AmountType = "numeric(20,2)";
+
+    /// <summary>Po tej nazwie PostgresLedgerStore rozpoznaje powtorke — dlatego nadana jawnie.</summary>
+    public const string IdempotencyIndex = "ix_journal_entries_idempotency_key";
+
+    public DbSet<AccountRow> Accounts => Set<AccountRow>();
+    public DbSet<JournalEntryRow> JournalEntries => Set<JournalEntryRow>();
+    public DbSet<PostingRow> Postings => Set<PostingRow>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<AccountRow>(account =>
+        {
+            account.Property(a => a.Type).HasConversion<string>().HasMaxLength(32);
+            account.Property(a => a.AssetKind).HasConversion<string>().HasMaxLength(16);
+            account.Property(a => a.AssetCode).HasMaxLength(12);
+            account.Property(a => a.NormalSide).HasConversion<string>().HasMaxLength(8);
+            account.Property(a => a.Balance).HasColumnType(AmountType);
+            // Konto domu maklerskiego nie ma klienta (NULL) — mimo to ma byc jedno, stad NULLS NOT DISTINCT.
+            account.HasIndex(a => new { a.Type, a.AssetKind, a.AssetCode, a.ClientId })
+                .IsUnique().AreNullsDistinct(false);
+            // Ostatnia linia obrony: nawet blad w kodzie nie zapisze ujemnego salda.
+            account.ToTable(t => t.HasCheckConstraint("ck_accounts_balance_not_negative", "balance >= 0"));
+        });
+
+        modelBuilder.Entity<JournalEntryRow>(entry =>
+        {
+            entry.Property(e => e.IdempotencyKey).HasMaxLength(ILedgerStore.MaxIdempotencyKeyLength);
+            entry.Property(e => e.Description).HasMaxLength(JournalEntry.MaxDescriptionLength);
+            entry.HasIndex(e => e.IdempotencyKey).IsUnique().HasDatabaseName(IdempotencyIndex);
+            entry.HasMany(e => e.Postings).WithOne().HasForeignKey(p => p.EntryId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<PostingRow>(posting =>
+        {
+            posting.Property(p => p.Side).HasConversion<string>().HasMaxLength(8);
+            posting.Property(p => p.Amount).HasColumnType(AmountType);
+            posting.HasOne(p => p.Account).WithMany().HasForeignKey(p => p.AccountId).OnDelete(DeleteBehavior.Restrict);
+            posting.HasIndex(p => new { p.EntryId, p.AccountId }).IsUnique();
+            posting.ToTable(t => t.HasCheckConstraint("ck_postings_amount_positive", "amount > 0"));
+        });
+    }
+}

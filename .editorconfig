@@ -1,0 +1,5 @@
+root = true
+
+# Migracje generuje dotnet ef — analizatory ich nie poprawiaja.
+[**/Migrations/*.cs]
+generated_code = true
