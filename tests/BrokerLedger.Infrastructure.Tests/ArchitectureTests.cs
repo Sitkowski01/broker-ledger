@@ -18,12 +18,12 @@ public class ArchitectureTests
     [Fact]
     public void Persistence_details_stay_internal()
     {
-        // Reszta aplikacji zna tylko ILedgerStore z domeny — wiersze i DbContext sa szczegolem tej warstwy.
-        // Wyjatek: migracje, ktore dotnet ef generuje jako publiczne.
+        // Reszta aplikacji zna tylko porty z domeny — wiersze i DbContext sa szczegolem tej warstwy.
+        // Publiczne jest tylko wejscie do DI i migracje, ktore dotnet ef generuje jako publiczne.
         var publicTypes = Infrastructure.GetExportedTypes().Where(t =>
             t.Namespace!.StartsWith("BrokerLedger.Infrastructure", StringComparison.Ordinal)
             && t.Namespace != "BrokerLedger.Infrastructure.Migrations");
 
-        Assert.Empty(publicTypes);
+        Assert.Equal([typeof(LedgerInfrastructure)], publicTypes);
     }
 }
