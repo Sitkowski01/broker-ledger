@@ -1,8 +1,11 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
 using Testcontainers.PostgreSql;
 
 namespace BrokerLedger.Api.Tests;
@@ -44,6 +47,33 @@ public sealed class BrokerApi : WebApplicationFactory<Program>, IAsyncLifetime
                 builder.UseSetting(key, value);
             }
         });
+
+    /// <summary>
+    /// Jak <see cref="With"/>, ale zadania przychodza z podanego adresu IP. TestServer go nie ustawia,
+    /// wiec robi to filtr przed reszta potoku — tam, gdzie w prawdziwym serwerze robi to Kestrel.
+    /// </summary>
+    public WebApplicationFactory<Program> FromAddress(IPAddress remote, params (string Key, string Value)[] settings) =>
+        WithWebHostBuilder(builder =>
+        {
+            foreach (var (key, value) in settings)
+            {
+                builder.UseSetting(key, value);
+            }
+            builder.ConfigureServices(services => services.AddSingleton<IStartupFilter>(new RemoteAddress(remote)));
+        });
+
+    private sealed class RemoteAddress(IPAddress remote) : IStartupFilter
+    {
+        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+        {
+            app.Use((context, nextMiddleware) =>
+            {
+                context.Connection.RemoteIpAddress = remote;
+                return nextMiddleware(context);
+            });
+            next(app);
+        };
+    }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
