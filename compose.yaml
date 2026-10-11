@@ -1,0 +1,19 @@
+# Baza do lokalnego uruchomienia: docker compose up -d, potem dotnet run --project src/BrokerLedger.Api
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: broker_ledger
+      POSTGRES_USER: broker
+      POSTGRES_PASSWORD: broker
+    ports:
+      - "5434:5432"
+    volumes:
+      - ledger-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U broker -d broker_ledger"]
+      interval: 2s
+      retries: 15
+
+volumes:
+  ledger-data:

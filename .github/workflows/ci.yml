@@ -13,7 +13,7 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
-      - name: Testy (jednostkowe, wlasnosci, architektura, integracyjne z PostgreSQL, API)
+      - name: Testy (jednostkowe, wlasnosci, architektura, integracyjne z PostgreSQL, e2e API)
         run: dotnet test
       - name: Mutation testing domeny (Stryker)
         run: |
@@ -41,4 +41,22 @@ jobs:
         if: always()
         with:
           name: stryker-infrastructure
+          path: StrykerOutput/**/reports
+
+  mutation-api:
+    # Mutanty API sprawdzaja testy e2e (cala aplikacja na PostgreSQL) — najdluzszy job.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Mutation testing API (Stryker + testy e2e)
+        run: |
+          dotnet tool restore
+          dotnet stryker -f stryker-api.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stryker-api
           path: StrykerOutput/**/reports

@@ -1,0 +1,8 @@
+{
+  "stryker-config": {
+    "project": "BrokerLedger.Api.csproj",
+    "test-projects": [ "tests/BrokerLedger.Api.Tests/BrokerLedger.Api.Tests.csproj" ],
+    "reporters": [ "html", "progress", "cleartext" ],
+    "thresholds": { "high": 90, "low": 80, "break": 80 }
+  }
+}
