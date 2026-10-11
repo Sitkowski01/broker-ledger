@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Commit ma dac sie przeczytac w jednym podejsciu: maks 200 linii diffa.
+# Wlaczenie: git config core.hooksPath .githooks
+if ! out="$("$(git rev-parse --show-toplevel)/scripts/commit-size.sh" 2>&1)"; then
+  echo "$out" >&2
+  exit 1
+fi
