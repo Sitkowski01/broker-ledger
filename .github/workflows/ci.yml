@@ -13,14 +13,32 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
-      - name: Testy (jednostkowe, architektura, API)
+      - name: Testy (jednostkowe, wlasnosci, architektura, integracyjne z PostgreSQL, API)
         run: dotnet test
-      - name: Mutation testing (Stryker)
+      - name: Mutation testing domeny (Stryker)
         run: |
           dotnet tool restore
           dotnet stryker
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: stryker
+          name: stryker-domain
+          path: StrykerOutput/**/reports
+
+  mutation-infrastructure:
+    # Osobno, bo kazdy przebieg testow stawia kontener PostgreSQL — trwa kilka minut.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Mutation testing warstwy bazy (Stryker + Testcontainers)
+        run: |
+          dotnet tool restore
+          dotnet stryker -f stryker-infrastructure.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stryker-infrastructure
           path: StrykerOutput/**/reports

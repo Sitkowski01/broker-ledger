@@ -1,0 +1,9 @@
+{
+  "stryker-config": {
+    "project": "BrokerLedger.Infrastructure.csproj",
+    "test-projects": [ "tests/BrokerLedger.Infrastructure.Tests/BrokerLedger.Infrastructure.Tests.csproj" ],
+    "mutate": [ "!**/Migrations/**/*.cs", "!**/LedgerDbContextFactory.cs" ],
+    "reporters": [ "html", "progress", "cleartext" ],
+    "thresholds": { "high": 90, "low": 80, "break": 80 }
+  }
+}
