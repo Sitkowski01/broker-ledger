@@ -57,6 +57,13 @@ public sealed class ProxyAndErrorTests(BrokerApi api)
     [InlineData("Orders:Settlement:Interval", "00:00:00", "Orders:Settlement needs a positive Interval and BatchSize")]
     [InlineData("Exchange:BaseUrl", "http://gw/parkiet", "Exchange:BaseUrl must be an absolute URL ending with")]
     [InlineData("Exchange:BaseUrl", "parkiet/", "Exchange:BaseUrl must be an absolute URL ending with")]
+    [InlineData("ExchangeRates:BaseUrl", "", "ExchangeRates:BaseUrl must be an absolute URL ending with")]
+    [InlineData("ExchangeRates:BaseUrl", "http://nbp/api", "ExchangeRates:BaseUrl must be an absolute URL ending with")]
+    [InlineData("ExchangeRates:BaseUrl", "nbp/", "ExchangeRates:BaseUrl must be an absolute URL ending with")]
+    [InlineData("ExchangeRates:AttemptTimeout", "00:00:00", "ExchangeRates needs a positive AttemptTimeout, CacheFor and RetryAfter")]
+    [InlineData("ExchangeRates:CacheFor", "00:00:00", "ExchangeRates needs a positive AttemptTimeout, CacheFor and RetryAfter")]
+    [InlineData("ExchangeRates:RetryAfter", "00:00:00", "ExchangeRates needs a positive AttemptTimeout, CacheFor and RetryAfter")]
+    [InlineData("ExchangeRates:Currencies:0", "eur", "currency code must be 3 upper-case letters")]
     public void Bad_configuration_names_the_problem(string key, string value, string message)
     {
         using var broken = api.With((key, value));
