@@ -98,6 +98,40 @@ public sealed class SettlementEndToEndTests(KafkaBrokerApi api)
         Assert.Equal(("2", "0"), await BalanceAsync(http, "CCC"));
     }
 
+    [Fact]
+    public async Task Settled_buy_shows_up_in_the_portfolio_valued_at_the_latest_trade()
+    {
+        using var http = await FundedClientAsync();
+        var order = await PlaceAsync(http, new { symbol = "DNP", side = "buy", type = "limit", limitPrice = "300.00", quantity = 5 });
+        await api.TradeAsync("DNP", Stranger, ExchangeId(order), "BUY", 290_00, 5);
+        await WaitForStatusAsync(http, order, "filled");
+
+        // Pozniej handluja inni — broker nie rozlicza tej transakcji, ale bierze z niej cene.
+        await api.TradeAsync("DNP", Stranger, Stranger + 1, "SELL", 310_00, 2);
+        var position = await WaitForPortfolioAsync(http, p => p.GetProperty("lastPrice").GetString() == "310.00");
+
+        // 5 x 290 = 1450 zl + 5,66 zl prowizji (0,39%)
+        Assert.Equal(("1455.66", "291.13", "1550.00", "94.34"),
+            (Text(position, "costBasis"), Text(position, "averageCost"), Text(position, "marketValue"), Text(position, "unrealizedPnl")));
+    }
+
+    /// <summary>Cena przychodzi ta sama droga co rozliczenie (Kafka → skrzynka), wiec na nia tez czekamy.</summary>
+    private static async Task<JsonElement> WaitForPortfolioAsync(HttpClient http, Func<JsonElement, bool> done)
+    {
+        var deadline = DateTime.UtcNow + Patience;
+        while (true)
+        {
+            var portfolio = await (await http.GetAsync(new Uri("/api/me/portfolio", UriKind.Relative))).JsonAsync();
+            if (portfolio.GetProperty("positions").EnumerateArray().FirstOrDefault() is { ValueKind: JsonValueKind.Object } position
+                && done(position))
+            {
+                return position;
+            }
+            Assert.True(DateTime.UtcNow < deadline, $"portfolio never got there, last seen: {portfolio}");
+            await Task.Delay(100);
+        }
+    }
+
     private long ExchangeId(Guid order) => api.Parkiet.ExchangeIdOf(order);
 
     private async Task<HttpClient> FundedClientAsync((string Symbol, long Quantity)? shares = null)
