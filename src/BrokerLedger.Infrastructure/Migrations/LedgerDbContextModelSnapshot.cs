@@ -114,6 +114,125 @@ namespace BrokerLedger.Infrastructure.Migrations
                     b.ToTable("clients", (string)null);
                 });
 
+            modelBuilder.Entity("BrokerLedger.Infrastructure.DeadLetterRow", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Error")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("error");
+
+                    b.Property<string>("Message")
+                        .HasColumnType("text")
+                        .HasColumnName("message");
+
+                    b.Property<DateTimeOffset>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("received_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_exchange_dead_letters");
+
+                    b.ToTable("exchange_dead_letters", (string)null);
+                });
+
+            modelBuilder.Entity("BrokerLedger.Infrastructure.InboxRow", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
+
+                    b.Property<long?>("MakerOrderId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("maker_order_id");
+
+                    b.Property<long?>("OrderId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("order_id");
+
+                    b.Property<decimal?>("Price")
+                        .HasColumnType("numeric(20,2)")
+                        .HasColumnName("price");
+
+                    b.Property<long>("Quantity")
+                        .HasColumnType("bigint")
+                        .HasColumnName("quantity");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("reason");
+
+                    b.Property<DateTimeOffset>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("received_at");
+
+                    b.Property<long>("RunId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("run_id");
+
+                    b.Property<long>("Sequence")
+                        .HasColumnType("bigint")
+                        .HasColumnName("sequence");
+
+                    b.Property<DateTimeOffset?>("SettledAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("settled_at");
+
+                    b.Property<string>("Symbol")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasColumnName("symbol");
+
+                    b.Property<long?>("TakerOrderId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("taker_order_id");
+
+                    b.Property<string>("TakerSide")
+                        .HasMaxLength(4)
+                        .HasColumnType("character varying(4)")
+                        .HasColumnName("taker_side");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("type");
+
+                    b.HasKey("Id")
+                        .HasName("pk_exchange_inbox");
+
+                    b.HasIndex("Id")
+                        .HasDatabaseName("ix_exchange_inbox_pending")
+                        .HasFilter("settled_at is null");
+
+                    b.HasIndex("RunId", "Symbol", "Sequence")
+                        .IsUnique()
+                        .HasDatabaseName("ix_exchange_inbox_run_id_symbol_sequence");
+
+                    b.ToTable("exchange_inbox", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_exchange_inbox_cancelled", "type <> 'CANCELLED' or (order_id is not null and reason is not null and maker_order_id is null)");
+
+                            t.HasCheckConstraint("ck_exchange_inbox_quantity_positive", "quantity > 0");
+
+                            t.HasCheckConstraint("ck_exchange_inbox_trade", "type <> 'TRADE' or (maker_order_id is not null and taker_order_id is not null and taker_side is not null and price is not null and price > 0 and order_id is null)");
+
+                            t.HasCheckConstraint("ck_exchange_inbox_type", "type in ('TRADE', 'CANCELLED')");
+                        });
+                });
+
             modelBuilder.Entity("BrokerLedger.Infrastructure.JournalEntryRow", b =>
                 {
                     b.Property<Guid>("Id")

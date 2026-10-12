@@ -19,6 +19,8 @@ internal sealed class LedgerDbContext(DbContextOptions<LedgerDbContext> options)
     public DbSet<PostingRow> Postings => Set<PostingRow>();
     public DbSet<ClientRow> Clients => Set<ClientRow>();
     public DbSet<OrderRow> Orders => Set<OrderRow>();
+    public DbSet<InboxRow> Inbox => Set<InboxRow>();
+    public DbSet<DeadLetterRow> DeadLetters => Set<DeadLetterRow>();
 
     /// <summary>To samo co <see cref="Order.NeedsAttention"/>: niedokonczone albo skonczone z blokada do zwolnienia.</summary>
     private const string NeedingAttentionFilter = "status in ('Pending', 'Unknown') "
@@ -98,6 +100,37 @@ internal sealed class LedgerDbContext(DbContextOptions<LedgerDbContext> options)
                 t.HasCheckConstraint("ck_orders_last_event_complete",
                     "(last_event_run_id is null) = (last_event_sequence is null)");
             });
+        });
+
+        modelBuilder.Entity<InboxRow>(inbox =>
+        {
+            inbox.ToTable("exchange_inbox");
+            inbox.Property(e => e.Id).UseIdentityAlwaysColumn();
+            inbox.Property(e => e.Symbol).HasMaxLength(12);
+            inbox.Property(e => e.Type).HasMaxLength(16);
+            inbox.Property(e => e.TakerSide).HasConversion<string>().HasMaxLength(4);
+            inbox.Property(e => e.Price).HasColumnType(AmountType);
+            inbox.Property(e => e.Reason).HasMaxLength(ExchangeEvent.Cancelled.MaxReasonLength);
+            // Powtorka z Kafki trafia na ten klucz i jest pomijana (ON CONFLICT DO NOTHING).
+            inbox.HasIndex(e => new { e.RunId, e.Symbol, e.Sequence }).IsUnique();
+            // Rozliczenie czyta tylko nierozliczone — maly indeks zamiast skanu calej historii.
+            inbox.HasIndex(e => e.Id).HasDatabaseName("ix_exchange_inbox_pending").HasFilter("settled_at is null");
+            inbox.ToTable(t =>
+            {
+                t.HasCheckConstraint("ck_exchange_inbox_trade", "type <> 'TRADE' or (maker_order_id is not null "
+                    + "and taker_order_id is not null and taker_side is not null and price is not null and price > 0 and order_id is null)");
+                t.HasCheckConstraint("ck_exchange_inbox_cancelled", "type <> 'CANCELLED' or (order_id is not null "
+                    + "and reason is not null and maker_order_id is null)");
+                t.HasCheckConstraint("ck_exchange_inbox_type", "type in ('TRADE', 'CANCELLED')");
+                t.HasCheckConstraint("ck_exchange_inbox_quantity_positive", "quantity > 0");
+            });
+        });
+
+        modelBuilder.Entity<DeadLetterRow>(letter =>
+        {
+            letter.ToTable("exchange_dead_letters");
+            letter.Property(l => l.Id).UseIdentityAlwaysColumn();
+            letter.Property(l => l.Error).HasMaxLength(PostgresDeadLetters.MaxErrorLength);
         });
     }
 }

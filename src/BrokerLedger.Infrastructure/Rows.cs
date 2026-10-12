@@ -74,3 +74,33 @@ internal sealed class OrderRow
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }
+
+/// <summary>Zdarzenie gieldy w skrzynce. Kolumny jednego z typow (TRADE / CANCELLED) — drugiego zostaja puste.</summary>
+internal sealed class InboxRow
+{
+    /// <summary>Kolejnosc przyjscia (identity) — w niej rozliczamy.</summary>
+    public long Id { get; set; }
+
+    public long RunId { get; set; }
+    public required string Symbol { get; set; }
+    public long Sequence { get; set; }
+    public required string Type { get; set; }
+    public long? MakerOrderId { get; set; }
+    public long? TakerOrderId { get; set; }
+    public OrderSide? TakerSide { get; set; }
+    public decimal? Price { get; set; }
+    public long? OrderId { get; set; }
+    public string? Reason { get; set; }
+    public long Quantity { get; set; }
+    public DateTimeOffset ReceivedAt { get; set; }
+    public DateTimeOffset? SettledAt { get; set; }
+}
+
+/// <summary>Wiadomosc z Kafki, ktorej broker nie umial przyjac — zostaje do wyjasnienia, zamiast zniknac.</summary>
+internal sealed class DeadLetterRow
+{
+    public long Id { get; set; }
+    public string? Message { get; set; }
+    public required string Error { get; set; }
+    public DateTimeOffset ReceivedAt { get; set; }
+}

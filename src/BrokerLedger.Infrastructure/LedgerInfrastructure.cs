@@ -17,6 +17,7 @@ public static class LedgerInfrastructure
         services.AddSingleton<ILedgerQueries, PostgresLedgerQueries>();
         services.AddSingleton<IClientRepository, PostgresClientRepository>();
         services.AddSingleton<IOrderRepository, PostgresOrderRepository>();
+        services.AddSingleton<PostgresDeadLetters>();
         return services;
     }
 
