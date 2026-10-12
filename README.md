@@ -22,7 +22,9 @@ klient ──► broker-ledger ──zlecenie──► Parkiet (giełda) ──t
   zwalnia pieniędzy, tylko oddaje zlecenie reconcilerowi w tle.
 - **Rozliczenie z Kafki** — inbox z deduplikacją, kupno i sprzedaż z prowizją liczoną od całego wykonania, zwrot
   niewykorzystanej blokady; transakcja, która przyszła przed numerem zlecenia, czeka zamiast przepaść.
-- **Testy** — 457: jednostkowe, własności (FsCheck), architektury, integracyjne na prawdziwym PostgreSQL i Kafce
+- **Portfel z księgi** — średnia cena ważona, zysk zrealizowany i niezrealizowany po ostatniej transakcji, wartość
+  w walutach po kursach NBP; NBP leży → portfel otwiera się z ostatnią znaną tabelą (cache, ponowienia, bezpiecznik).
+- **Testy** — 529: jednostkowe, własności (FsCheck), architektury, integracyjne na prawdziwym PostgreSQL i Kafce
   (Testcontainers), e2e po HTTP; testy mutacyjne w CI na trzech warstwach (domena 99,6%, baza 98,2%, API 98,2%).
 
 C# / .NET 10, ASP.NET Core (minimal API, JWT, rate limiting), EF Core + PostgreSQL, Kafka (Confluent.Kafka), xUnit, FsCheck, Testcontainers, Stryker.NET.
@@ -36,7 +38,10 @@ operation is a balanced journal entry, history is append-only (enforced by a tri
 and concurrent withdrawals are serialized with row locks taken in a fixed order. Orders run as a saga — block funds,
 send to the exchange with a client order id, accept or release — with a background reconciler for timeouts. Trades
 come back from the exchange over Kafka (at least once) into an inbox and are settled idempotently, so each one is
-booked once: purchase and sale entries with a commission charged on the whole fill, and the unused part of the block returned. Tested with unit, property-based,
+booked once: purchase and sale entries with a commission charged on the whole fill, and the unused part of the block returned. The portfolio
+is derived from the ledger itself (weighted average cost, realized and unrealized P&L at the last trade price) and
+converted to other currencies at NBP mid rates, fetched through a cached, retrying, circuit-breaking HTTP client that
+falls back to the last known table when NBP is down. Tested with unit, property-based,
 architecture, integration (Testcontainers: PostgreSQL and Kafka) and end-to-end tests, plus mutation testing in CI.
 </details>
 
@@ -50,7 +55,7 @@ architecture, integration (Testcontainers: PostgreSQL and Kafka) and end-to-end 
 | 4 | API: rejestracja i JWT, wpłaty i wypłaty z kluczem idempotencji, salda, historia, rate limiting, testy e2e | ✅ |
 | 5 | Zlecenia (saga): blokada → Parkiet z `clientOrderId` → przyjęcie albo zwolnienie; reconciler dla timeoutów | ✅ |
 | 6 | Rozliczenie transakcji z Kafki: inbox, prowizja od całego wykonania, zwolnienie reszty blokady, odporne na powtórki | ✅ |
-| 7 | Portfel: pozycje, średnia cena, zysk/strata, kursy NBP | |
+| 7 | Portfel z księgi: pozycje, średnia cena ważona, zysk zrealizowany i niezrealizowany, wartość w walutach po kursach NBP (cache, ponowienia, bezpiecznik) | ✅ |
 
 ## Pieniądze
 
@@ -132,6 +137,7 @@ wypłata 100 zł        Wn ClientAvailable:PLN   100   │  Ma Bank:PLN         
 | `POST` | `/api/me/deposits` | wpłata `{amount: "250.40", currency: "PLN"}` (symulowany przelew przychodzący) |
 | `POST` | `/api/me/withdrawals` | wypłata; za mało środków → 422 z kwotą dostępną |
 | `GET` | `/api/me/history?limit=20&before=…` | dokumenty klienta od najnowszych, tylko jego zapisy; kursor `nextBefore` |
+| `GET` | `/api/me/portfolio` | pozycje, średnia cena, zysk/strata, wartość w walutach po kursach NBP — [niżej](#portfel-i-kursy-nbp) |
 
 - **`Idempotency-Key` jest obowiązkowy** przy wpłacie i wypłacie. Pierwsze wykonanie → 201, powtórka
   z tym samym kluczem i treścią → 200 `alreadyPosted` (nic się nie zmienia), ten sam klucz z inną treścią → 409.
@@ -238,6 +244,37 @@ zwolnienie reszty
 Zlecenie w API pokazuje wykonanie: `filledQuantity`, `filledValue`, `commission`, a status przechodzi
 `accepted` → `filled` albo `cancelled`.
 
+## Portfel i kursy NBP
+
+`GET /api/me/portfolio` — otwarte pozycje wycenione po ostatniej transakcji, zamknięte z wynikiem, sumy
+i wartość całego rachunku w EUR / USD / GBP / CHF po kursie średnim NBP.
+
+```
+{"positions":[{"symbol":"CDR","quantity":10,"averageCost":"100.39","costBasis":"1003.90","lastPrice":"110.50",
+   "marketValue":"1105.00","unrealizedPnl":"101.10","returnPercent":"10.07","realizedPnl":"0.00", ...}],
+ "closed":[{"symbol":"PKO","realizedPnl":"34.00"}],
+ "summary":{"cash":"9030.10","sharesValue":"1105.00","unrealizedPnl":"101.10","realizedPnl":"34.00","totalValue":"10135.10", ...},
+ "totalValueIn":[{"currency":"EUR","amount":"2384.73"}, ...],
+ "rates":{"source":"NBP","table":"198/A/NBP/2026","effectiveDate":"2026-10-09","stale":false,"mid":{"EUR":"4.25", ...}}}
+```
+
+- **Portfel liczony z księgi**, bez osobnej tabeli pozycji, która mogłaby się z nią rozjechać. Liczy się zmiana
+  akcji i gotówki klienta w dokumencie, a nie jego opis: kupno to „akcji przybyło, gotówki ubyło”, sprzedaż
+  odwrotnie, blokada pod zlecenie niczego nie zmienia (akcje zablokowane pod sprzedaż wciąż są klienta).
+- **Średnia cena ważona** z prowizją. Sprzedaż zdejmuje z kosztu ułamek równy ułamkowi sprzedanych akcji
+  (do grosza), a sprzedaż wszystkiego — cały koszt, więc na pustej pozycji nie zostają grosze z zaokrągleń.
+  Test własności sprawdza na losowych ciągach, że wynik zrealizowany + koszt pozostałych = otrzymane − zapłacone + ten koszt.
+- **Ostatnia cena ze skrzynki zdarzeń.** Broker i tak dostaje z Kafki wszystkie transakcje giełdy, więc nie potrzebuje
+  osobnego strumienia notowań: `DISTINCT ON (symbol)` po indeksie częściowym `(symbol, id DESC) WHERE type = 'TRADE'`.
+  Spółka bez żadnej transakcji jest wyceniana po koszcie. Akcje przeniesione od innego biura mają koszt 0.
+- **Kursy NBP z pamięci.** Tabela A zmienia się raz dziennie, więc trzymamy ją godzinę i nie pytamy NBP przy każdym
+  otwarciu portfela; równoległe żądania czekają na jedno zapytanie. HttpClient ma potok odporności
+  (`Microsoft.Extensions.Http.Resilience`): limit czasu każdej próby, dwa ponowienia z wykładniczą przerwą przy 5xx
+  i timeoucie, bezpiecznik. Inaczej niż przy giełdzie ponowienia są tu bezpieczne — GET niczego nie zmienia.
+- **NBP leży → portfel i tak się otwiera.** Z ostatnią znaną tabelą oznaczoną `"stale": true` albo — gdy żadnej
+  jeszcze nie było — bez przeliczeń (`"rates": null`). Po nieudanej próbie przez minutę nie pytamy wcale, żeby
+  każde żądanie nie czekało na kolejny timeout. NBP nie wchodzi do `/health`: bez kursów broker działa.
+
 ## Uruchomienie
 
 ```bash
@@ -288,6 +325,9 @@ dotnet stryker -f stryker-api.json              # testy mutacyjne API na testach
 | Rozliczenie (FsCheck) | losowy podział zlecenia na transakcje po losowych cenach, czasem anulowane: blokada zawsze kończy na zerze, prowizja raz od całości, gotówka i akcje się zgadzają |
 | Kafka (integracyjne) | prawdziwa Kafka i PostgreSQL w Dockerze: format zdarzeń Parkietu, powtórki, zepsute wiadomości, offset po restarcie konsumenta, awaria bazy ponawiana |
 | E2E rozliczenia | HTTP → Parkiet w pamięci → zdarzenie na Kafce → skrzynka → księga → salda przez HTTP; także transakcja dla zlecenia `unknown`, która czeka na reconciler |
+| Portfel (jednostkowe + FsCheck) | średnia z prowizją, częściowa i pełna sprzedaż, prowizja równa wartości, blokady bez wpływu, akcje z kosztem 0; losowe ciągi kupna i sprzedaży nie gubią ani nie dorabiają grosza |
+| Kursy NBP | format tabeli A i odrzucanie zepsutych odpowiedzi; pamięć, przeterminowana tabela, przerwa po awarii, jedno zapytanie dla wielu żądań; prawdziwy potok odporności: 5xx ponawiane, zawieszona próba ucięta, 404 bez ponowień |
+| E2E portfela | HTTP → księga i skrzynka w PostgreSQL → atrapa NBP: wycena, waluty, NBP leży, tabela przeterminowana; pełna droga zlecenie → Kafka → rozliczenie → portfel wyceniony po późniejszej cudzej transakcji |
 | Mutacyjne | Stryker psuje kod i sprawdza, czy testy to wykryją — osobno domena, warstwa bazy i API |
 
 Na Windowsie z zainstalowanym Visual Studio 2022 Stryker bierze jego starszy MSBuild, który nie zna
