@@ -107,6 +107,38 @@ internal sealed class InMemoryOrders : IOrderRepository
         o.Execution);
 }
 
+/// <summary>Skrzynka zdarzen w pamieci: dedup po pozycji i spolce, kolejnosc dodania.</summary>
+internal sealed class InMemoryInbox : IExchangeInbox
+{
+    private readonly List<(ExchangeEvent Event, bool Settled)> _events = [];
+
+    public IEnumerable<ExchangeEvent> Settled => _events.Where(e => e.Settled).Select(e => e.Event);
+
+    public Task<bool> AddAsync(ExchangeEvent exchangeEvent, CancellationToken cancellationToken = default)
+    {
+        if (_events.Exists(e => SameEvent(e.Event, exchangeEvent)))
+        {
+            return Task.FromResult(false);
+        }
+        _events.Add((exchangeEvent, false));
+        return Task.FromResult(true);
+    }
+
+    public Task<IReadOnlyList<ExchangeEvent>> PendingAsync(int limit, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<ExchangeEvent>>(_events.Where(e => !e.Settled)
+            .GroupBy(e => e.Event.Symbol).SelectMany(g => g.Take(limit)).Select(e => e.Event)
+            .OrderBy(e => _events.FindIndex(x => SameEvent(x.Event, e))).ToList());
+
+    public Task MarkSettledAsync(ExchangeEvent exchangeEvent, CancellationToken cancellationToken = default)
+    {
+        var index = _events.FindIndex(e => SameEvent(e.Event, exchangeEvent));
+        _events[index] = (exchangeEvent, true);
+        return Task.CompletedTask;
+    }
+
+    private static bool SameEvent(ExchangeEvent a, ExchangeEvent b) => a.Symbol == b.Symbol && a.Position == b.Position;
+}
+
 /// <summary>Gielda, ktora odpowiada po kolei tym, co test jej zada.</summary>
 internal sealed class ScriptedExchange : IExchange
 {
