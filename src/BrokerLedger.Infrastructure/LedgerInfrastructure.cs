@@ -38,6 +38,22 @@ public static class LedgerInfrastructure
         return services;
     }
 
+    /// <summary>
+    /// Konsument zdarzen gieldy z Kafki (w tle) — odklada je do skrzynki. Grupa konsumentow pozwala uruchomic
+    /// kilka instancji brokera: kazda partycja (spolka) trafia do jednej z nich.
+    /// </summary>
+    public static IServiceCollection AddExchangeEventsConsumer(this IServiceCollection services,
+        string bootstrapServers, string topic, string groupId, TimeSpan retryDelay)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(bootstrapServers);
+        ArgumentException.ThrowIfNullOrWhiteSpace(topic);
+        ArgumentException.ThrowIfNullOrWhiteSpace(groupId);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(retryDelay, TimeSpan.Zero);
+        services.AddSingleton(new ExchangeEventsSettings(bootstrapServers, topic, groupId, retryDelay));
+        services.AddHostedService<ExchangeEventConsumer>();
+        return services;
+    }
+
     /// <summary>Aplikacja jest zdrowa tylko wtedy, gdy dosiega bazy — bez niej nie zaksieguje niczego.</summary>
     public static IHealthChecksBuilder AddLedgerDatabaseCheck(this IHealthChecksBuilder builder) =>
         builder.AddCheck<LedgerDatabaseHealthCheck>("database");
