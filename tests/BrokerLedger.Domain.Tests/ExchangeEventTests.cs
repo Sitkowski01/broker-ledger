@@ -100,4 +100,43 @@ public class ExchangeEventTests
         Assert.Equal(order, ex.Order);
     }
 
+    [Fact]
+    public void Purchase_moves_cash_out_and_shares_in()
+    {
+        var client = ClientId.New();
+
+        var entry = JournalEntries.Purchase(client, "CDR", 10, 2500m, 9.75m);
+
+        Assert.Equal("purchase", entry.Description);
+        Assert.Equal(new[]
+        {
+            Posting.Debit(AccountId.Blocked(client, Asset.Cash(Currency.Pln)), 2509.75m),
+            Posting.Credit(AccountId.Bank(Currency.Pln), 2500m),
+            Posting.Debit(AccountId.Depository("CDR"), 10m),
+            Posting.Credit(AccountId.Available(client, Asset.Shares("CDR")), 10m),
+            Posting.Credit(AccountId.FeeIncome(Currency.Pln), 9.75m),
+        }, entry.Postings);
+        Assert.Equal(4, JournalEntries.Purchase(client, "CDR", 1, 5m, 0m).Postings.Count);
+    }
+
+    [Fact]
+    public void Sale_pays_the_value_minus_the_fee()
+    {
+        var client = ClientId.New();
+
+        var entry = JournalEntries.Sale(client, "CDR", 10, 2500m, 9.75m);
+
+        Assert.Equal("sale", entry.Description);
+        Assert.Equal(new[]
+        {
+            Posting.Debit(AccountId.Blocked(client, Asset.Shares("CDR")), 10m),
+            Posting.Credit(AccountId.Depository("CDR"), 10m),
+            Posting.Debit(AccountId.Bank(Currency.Pln), 2500m),
+            Posting.Credit(AccountId.Available(client, Asset.Cash(Currency.Pln)), 2490.25m),
+            Posting.Credit(AccountId.FeeIncome(Currency.Pln), 9.75m),
+        }, entry.Postings);
+        // Cala wartosc zjadla prowizja: klient nie dostaje nic, ale tez nic nie traci ponad akcje.
+        Assert.DoesNotContain(JournalEntries.Sale(client, "CDR", 1, 2m, 2m).Postings, p => p.Account.IsClientAccount && p.Account.Asset.Kind == AssetKind.Cash);
+        Assert.Equal(4, JournalEntries.Sale(client, "CDR", 1, 5m, 0m).Postings.Count);
+    }
 }
