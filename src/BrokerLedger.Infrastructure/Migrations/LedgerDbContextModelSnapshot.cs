@@ -217,6 +217,11 @@ namespace BrokerLedger.Infrastructure.Migrations
                         .HasDatabaseName("ix_exchange_inbox_pending")
                         .HasFilter("settled_at is null");
 
+                    b.HasIndex("Symbol", "Id")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_exchange_inbox_last_trade")
+                        .HasFilter("type = 'TRADE'");
+
                     b.HasIndex("RunId", "Symbol", "Sequence")
                         .IsUnique()
                         .HasDatabaseName("ix_exchange_inbox_run_id_symbol_sequence");

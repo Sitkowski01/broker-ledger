@@ -19,6 +19,7 @@ public static class LedgerInfrastructure
         services.AddSingleton<IOrderRepository, PostgresOrderRepository>();
         services.AddSingleton<IExchangeInbox, PostgresExchangeInbox>();
         services.AddSingleton<PostgresDeadLetters>();
+        services.AddSingleton<IMarketPrices, PostgresMarketPrices>();
         return services;
     }
 

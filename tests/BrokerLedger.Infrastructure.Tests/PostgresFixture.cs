@@ -88,6 +88,8 @@ public sealed class TestDatabase(string connectionString) : IAsyncDisposable
 
     internal PostgresDeadLetters DeadLetters() => new(_contexts, TimeProvider.System);
 
+    internal PostgresMarketPrices Prices() => new(_contexts);
+
     internal LedgerDbContext Context() => _contexts.CreateDbContext();
 
     public async Task<int> ExecuteAsync(string sql)

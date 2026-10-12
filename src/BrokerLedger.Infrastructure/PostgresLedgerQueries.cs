@@ -30,9 +30,24 @@ internal sealed class PostgresLedgerQueries(IDbContextFactory<LedgerDbContext> c
         {
             entries = entries.Where(e => e.Sequence < cursor);
         }
+        return await ToHistoryAsync(client, entries.OrderByDescending(e => e.Sequence).Take(limit), cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<HistoryEntry>> ClientShareEntriesAsync(ClientId client, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken);
+        var entries = db.JournalEntries.AsNoTracking()
+            .Where(e => e.Postings.Any(p => p.Account.ClientId == client.Value && p.Account.AssetKind == AssetKind.Shares))
+            .OrderBy(e => e.Sequence);
+        return await ToHistoryAsync(client, entries, cancellationToken);
+    }
+
+    /// <summary>Dokumenty z samymi zapisami klienta — cudze konta (bank, depozyt, prowizja) zostaja w bazie.</summary>
+    private static async Task<IReadOnlyList<HistoryEntry>> ToHistoryAsync(
+        ClientId client, IQueryable<JournalEntryRow> entries, CancellationToken cancellationToken)
+    {
         var rows = await entries
-            .OrderByDescending(e => e.Sequence)
-            .Take(limit)
             .Select(e => new
             {
                 e.Id,

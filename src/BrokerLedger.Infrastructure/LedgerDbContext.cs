@@ -115,6 +115,9 @@ internal sealed class LedgerDbContext(DbContextOptions<LedgerDbContext> options)
             inbox.HasIndex(e => new { e.RunId, e.Symbol, e.Sequence }).IsUnique();
             // Rozliczenie czyta tylko nierozliczone — maly indeks zamiast skanu calej historii.
             inbox.HasIndex(e => e.Id).HasDatabaseName("ix_exchange_inbox_pending").HasFilter("settled_at is null");
+            // Wycena portfela bierze ostatnia transakcje spolki: jeden skok po indeksie od konca zamiast skanu.
+            inbox.HasIndex(e => new { e.Symbol, e.Id }).HasDatabaseName("ix_exchange_inbox_last_trade")
+                .IsDescending(false, true).HasFilter("type = 'TRADE'");
             inbox.ToTable(t =>
             {
                 t.HasCheckConstraint("ck_exchange_inbox_trade", "type <> 'TRADE' or (maker_order_id is not null "

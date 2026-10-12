@@ -18,4 +18,10 @@ public interface ILedgerQueries
     /// <summary>Od najnowszych; <paramref name="before"/> to <see cref="HistoryEntry.Sequence"/> ostatniego dokumentu z poprzedniej strony.</summary>
     Task<IReadOnlyList<HistoryEntry>> ClientHistoryAsync(
         ClientId client, int limit, long? before = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Wszystkie dokumenty, ktore dotknely akcji klienta, od najstarszych — z kompletem jego zapisow
+    /// (takze gotowkowych), bo z nich <see cref="Portfolio"/> liczy koszt i zysk.
+    /// </summary>
+    Task<IReadOnlyList<HistoryEntry>> ClientShareEntriesAsync(ClientId client, CancellationToken cancellationToken = default);
 }
