@@ -20,6 +20,15 @@ public interface IOrderRepository
     /// Tylko zmienione przed <paramref name="updatedBefore"/> — swiezymi zajmuje sie jeszcze zadanie klienta.
     /// </summary>
     Task<IReadOnlyList<Order>> NeedingAttentionAsync(DateTimeOffset updatedBefore, int limit, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Zlecenia z tym numerem gieldy. Zwykle jedno; wiecej, gdy gielda zaczela nowy przebieg i numeracja
+    /// ruszyla od poczatku. Od najstarszego.
+    /// </summary>
+    Task<IReadOnlyList<Order>> ByExchangeOrderIdAsync(string symbol, long exchangeOrderId, CancellationToken cancellationToken = default);
+
+    /// <summary>Czy na tej spolce jest zlecenie <see cref="Order.IsInFlight"/>.</summary>
+    Task<bool> HasInFlightAsync(string symbol, CancellationToken cancellationToken = default);
 }
 
 public sealed class OrderConcurrencyException(OrderId order)

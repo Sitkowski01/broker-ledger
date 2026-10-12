@@ -3,7 +3,7 @@ using BrokerLedger.Domain;
 namespace BrokerLedger.Infrastructure.Tests;
 
 [Collection(SharedPostgres.Name)]
-public sealed class OrderRepositoryTests(PostgresFixture postgres) : IAsyncLifetime
+public sealed partial class OrderRepositoryTests(PostgresFixture postgres) : IAsyncLifetime
 {
     private static readonly OrderRequest Buy = new("CDR", OrderSide.Buy, OrderType.Limit, 250.40m, 10);
     private readonly ClientId _client = ClientId.New();

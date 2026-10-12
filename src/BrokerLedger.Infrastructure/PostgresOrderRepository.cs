@@ -97,6 +97,27 @@ internal sealed class PostgresOrderRepository(IDbContextFactory<LedgerDbContext>
         return rows.Select(ToOrder).ToList();
     }
 
+    public async Task<IReadOnlyList<Order>> ByExchangeOrderIdAsync(string symbol, long exchangeOrderId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(symbol);
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken);
+        var rows = await db.Orders.AsNoTracking()
+            .Where(o => o.Symbol == symbol && o.ExchangeOrderId == exchangeOrderId)
+            .OrderBy(o => o.CreatedAt)
+            .ToListAsync(cancellationToken);
+        return rows.Select(ToOrder).ToList();
+    }
+
+    public async Task<bool> HasInFlightAsync(string symbol, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(symbol);
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken);
+        // Ten sam warunek co Order.IsInFlight.
+        return await db.Orders.AnyAsync(o => o.Symbol == symbol
+            && (o.Status == OrderStatus.Unknown || (o.Status == OrderStatus.Pending && o.SubmitAttempts > 0)), cancellationToken);
+    }
+
     private static Order ToOrder(OrderRow row) => Order.Restore(
         new OrderId(row.Id), new ClientId(row.ClientId), row.ClientKey,
         new OrderRequest(row.Symbol, row.Side, row.Type, row.LimitPrice, row.Quantity),

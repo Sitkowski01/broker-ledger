@@ -44,6 +44,9 @@ internal sealed class InMemoryOrders : IOrderRepository
     /// <summary>Numer zapisu (od 1), przy ktorym repozytorium rzuci wyjatkiem zamiast zapisac.</summary>
     public int? FailOnSave { get; set; }
 
+    /// <summary>Numer zapisu, przy ktorym "ktos byl szybszy" (konflikt wersji).</summary>
+    public int? ConflictOnSave { get; set; }
+
     public Task<Order> AddOrGetAsync(Order order, CancellationToken cancellationToken = default)
     {
         var existing = _stored.Values.FirstOrDefault(o => o.Client == order.Client && o.ClientKey == order.ClientKey);
@@ -68,7 +71,7 @@ internal sealed class InMemoryOrders : IOrderRepository
         {
             throw new TimeoutException("database did not answer");
         }
-        if (_stored[order.Id].Version != order.Version)
+        if (_stored[order.Id].Version != order.Version || Saves == ConflictOnSave)
         {
             throw new OrderConcurrencyException(order.Id);
         }
@@ -81,8 +84,25 @@ internal sealed class InMemoryOrders : IOrderRepository
     public Task<IReadOnlyList<Order>> NeedingAttentionAsync(DateTimeOffset updatedBefore, int limit, CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<Order>>(_stored.Values.Where(o => o.NeedsAttention).Take(limit).Select(Copy).ToList());
 
+    /// <summary>Wolane zaraz po wyszukaniu po numerze — do wcisniecia zmiany "w miedzyczasie".</summary>
+    public Action? AfterLookup { get; set; }
+
+    public Task<IReadOnlyList<Order>> ByExchangeOrderIdAsync(string symbol, long exchangeOrderId, CancellationToken cancellationToken = default)
+    {
+        IReadOnlyList<Order> found = _stored.Values
+            .Where(o => o.Symbol == symbol && o.ExchangeOrderId == exchangeOrderId).Select(Copy).ToList();
+        AfterLookup?.Invoke();
+        return Task.FromResult(found);
+    }
+
+    public Task<bool> HasInFlightAsync(string symbol, CancellationToken cancellationToken = default) =>
+        Task.FromResult(_stored.Values.Any(o => o.Symbol == symbol && o.IsInFlight));
+
+    /// <summary>Podmienia zapisane zlecenie z pominieciem wersji — do ustawiania stanu w testach.</summary>
+    public void Put(Order order) => _stored[order.Id] = Copy(order);
+
     /// <summary>Kopia jak po odczycie z bazy — test nie moze przypadkiem dzielic obiektu z repozytorium.</summary>
-    private static Order Copy(Order o) => Order.Restore(o.Id, o.Client, o.ClientKey, o.Request, o.BlockedAmount,
+    internal static Order Copy(Order o) => Order.Restore(o.Id, o.Client, o.ClientKey, o.Request, o.BlockedAmount,
         o.Status, o.ExchangeOrderId, o.RejectionReason, o.FundsBlocked, o.FundsReleased, o.SubmitAttempts, o.Version,
         o.Execution);
 }

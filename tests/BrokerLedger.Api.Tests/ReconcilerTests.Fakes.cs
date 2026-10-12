@@ -40,6 +40,11 @@ public partial class ReconcilerTests
 
         public Task<IReadOnlyList<Order>> ClientOrdersAsync(ClientId client, int limit, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
+
+        public Task<IReadOnlyList<Order>> ByExchangeOrderIdAsync(string symbol, long exchangeOrderId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
+        public Task<bool> HasInFlightAsync(string symbol, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class Exchange : IExchange
