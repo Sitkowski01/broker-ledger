@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using BrokerLedger.Api.Orders;
 using BrokerLedger.Domain;
+using BrokerLedger.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Testcontainers.PostgreSql;
@@ -25,6 +26,9 @@ public class BrokerApi : WebApplicationFactory<Program>, IAsyncLifetime
 
     /// <summary>Gielda, z ktora rozmawia broker w testach — w pamieci, z awariami na zyczenie.</summary>
     public FakeParkiet Parkiet { get; } = new();
+
+    /// <summary>Kursy walut NBP — testy nie wychodza do prawdziwego API.</summary>
+    public FakeNbp Nbp { get; } = new();
 
     /// <summary>Jeden przebieg reconcilera — w testach wylaczonego, zeby wynik nie zalezal od zegara.</summary>
     internal async Task<int> ReconcileAsync()
@@ -103,8 +107,13 @@ public class BrokerApi : WebApplicationFactory<Program>, IAsyncLifetime
         // Reconciler bierze tylko zlecenia starsze niz timeout gieldy — w testach oba sa krotkie.
         builder.UseSetting("Exchange:Timeout", "00:00:00.200");
         builder.UseSetting("Orders:Reconciler:MinAge", "00:00:00.300");
+        builder.UseSetting("ExchangeRates:BaseUrl", "http://nbp.test/");
+        builder.UseSetting("ExchangeRates:AttemptTimeout", "00:00:00.500");
         builder.ConfigureServices(services =>
-            services.AddHttpClient(nameof(IExchange)).ConfigurePrimaryHttpMessageHandler(Parkiet.Handler));
+        {
+            services.AddHttpClient(nameof(IExchange)).ConfigurePrimaryHttpMessageHandler(Parkiet.Handler);
+            services.AddHttpClient(LedgerInfrastructure.NbpHttpClient).ConfigurePrimaryHttpMessageHandler(Nbp.Handler);
+        });
     }
 }
 
