@@ -17,7 +17,7 @@ namespace BrokerLedger.Api.Tests;
 /// Cala aplikacja w pamieci (TestServer) na prawdziwym PostgreSQL w Dockerze. Migracje robi sama aplikacja
 /// przy starcie — tak jak lokalnie. Testy rozdzielaja sie unikalnymi adresami e-mail.
 /// </summary>
-public sealed class BrokerApi : WebApplicationFactory<Program>, IAsyncLifetime
+public class BrokerApi : WebApplicationFactory<Program>, IAsyncLifetime
 {
     public const string SigningKey = "test-signing-key-at-least-32-bytes-long";
 
@@ -33,7 +33,7 @@ public sealed class BrokerApi : WebApplicationFactory<Program>, IAsyncLifetime
         return await Services.GetServices<IHostedService>().OfType<OrderReconciler>().Single().RunOnceAsync();
     }
 
-    public async Task InitializeAsync()
+    public virtual async Task InitializeAsync()
     {
         await _postgres.StartAsync();
         // Pierwsze zapytanie stawia host i robi migracje — zanim testy zaczna sie scigac.
@@ -41,7 +41,7 @@ public sealed class BrokerApi : WebApplicationFactory<Program>, IAsyncLifetime
         (await client.GetAsync(new Uri("/health", UriKind.Relative))).EnsureSuccessStatusCode();
     }
 
-    public new async Task DisposeAsync()
+    public new virtual async Task DisposeAsync()
     {
         await base.DisposeAsync();
         await _postgres.DisposeAsync();

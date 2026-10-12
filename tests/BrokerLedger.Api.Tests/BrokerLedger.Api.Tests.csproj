@@ -3,6 +3,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
     <PackageReference Include="NetArchTest.Rules" />
+    <PackageReference Include="Testcontainers.Kafka" />
     <PackageReference Include="Testcontainers.PostgreSql" />
   </ItemGroup>
 

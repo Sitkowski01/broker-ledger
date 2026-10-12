@@ -45,6 +45,9 @@ public sealed partial class FakeParkiet
     public int PlaceCalls => _placeCalls;
     private int _placeCalls;
 
+    /// <summary>Numer, pod ktorym gielda przyjela zlecenie brokera — takze wtedy, gdy broker go jeszcze nie zna.</summary>
+    public long ExchangeIdOf(Guid brokerOrderId) => _byClientOrderId[brokerOrderId.ToString("N")];
+
     public FakeParkiet Then(params Fault[] faults)
     {
         foreach (var fault in faults)

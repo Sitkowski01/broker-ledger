@@ -162,11 +162,15 @@ internal static class OrderEndpoints
 
 internal sealed record OrderView(
     Guid Id, string Symbol, string Side, string Type, string? LimitPrice, long Quantity, string Status,
-    long? ExchangeOrderId, string? RejectionReason, string BlockedAsset, string Blocked)
+    long? ExchangeOrderId, string? RejectionReason, string BlockedAsset, string Blocked,
+    long FilledQuantity, string FilledValue, string Commission)
 {
+    private static readonly Asset Pln = Asset.Cash(Currency.Pln);
+
     public static OrderView Of(Order order) => new(
         order.Id.Value, order.Symbol, order.Side.ToString().ToLowerInvariant(), order.Type.ToString().ToLowerInvariant(),
-        order.LimitPrice is { } price ? Amounts.Format(price, Asset.Cash(Currency.Pln)) : null,
+        order.LimitPrice is { } price ? Amounts.Format(price, Pln) : null,
         order.Quantity, order.Status.ToString().ToLowerInvariant(), order.ExchangeOrderId, order.RejectionReason,
-        order.BlockedAsset.Code, Amounts.Format(order.BlockedAmount, order.BlockedAsset));
+        order.BlockedAsset.Code, Amounts.Format(order.BlockedAmount, order.BlockedAsset),
+        order.Execution.Quantity, Amounts.Format(order.Execution.Value, Pln), Amounts.Format(order.Execution.Commission, Pln));
 }
