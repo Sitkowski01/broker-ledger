@@ -10,7 +10,7 @@ klient ──► broker-ledger ──zlecenie──► Parkiet (giełda) ──t
                └──────────────── rozliczenie ◄───────────────────────────┘
 ```
 
-C# / .NET 10, ASP.NET Core (minimal API, JWT, rate limiting), EF Core + PostgreSQL, xUnit, FsCheck, Testcontainers, Stryker.NET.
+C# / .NET 10, ASP.NET Core (minimal API, JWT, rate limiting), EF Core + PostgreSQL, Kafka (Confluent.Kafka), xUnit, FsCheck, Testcontainers, Stryker.NET.
 
 ## Zakres
 
@@ -21,7 +21,7 @@ C# / .NET 10, ASP.NET Core (minimal API, JWT, rate limiting), EF Core + PostgreS
 | 3 | PostgreSQL (EF Core): historia nie do przepisania, idempotencja, saldo bez wyścigów i zakleszczeń, Testcontainers | ✅ |
 | 4 | API: rejestracja i JWT, wpłaty i wypłaty z kluczem idempotencji, salda, historia, rate limiting, testy e2e | ✅ |
 | 5 | Zlecenia (saga): blokada → Parkiet z `clientOrderId` → przyjęcie albo zwolnienie; reconciler dla timeoutów | ✅ |
-| 6 | Rozliczenie transakcji z Kafki, odporne na powtórki | |
+| 6 | Rozliczenie transakcji z Kafki: inbox, prowizja od całego wykonania, zwolnienie reszty blokady, odporne na powtórki | ✅ |
 | 7 | Portfel: pozycje, średnia cena, zysk/strata, kursy NBP | |
 
 ## Pieniądze
@@ -155,7 +155,7 @@ POST /api/me/orders  {"symbol":"CDR","side":"buy","type":"limit","limitPrice":"2
 - **Anulowanie** (`DELETE /api/me/orders/{id}`) to prośba do giełdy → `cancelrequested`. Środki zwolni
   zdarzenie anulowania z Kafki — dopiero ono mówi, ile zlecenia zdążyło się zrealizować.
 - **Po przyjęciu liczy się już tylko giełda.** Transakcje, reszta PKC anulowana z braku ofert i pełna realizacja
-  przychodzą jako zdarzenia z Kafki — rozliczenie i zwolnienie reszty blokady to etap 6.
+  przychodzą jako zdarzenia z Kafki — patrz niżej.
 
 | Odpowiedź | Kiedy |
 |---|---|
@@ -165,11 +165,57 @@ POST /api/me/orders  {"symbol":"CDR","side":"buy","type":"limit","limitPrice":"2
 | 409 | ten sam klucz z innym zleceniem / anulowanie zlecenia, które nie jest otwarte |
 | 422 | odrzucone: brak środków albo odmowa giełdy (powód w `rejectionReason`) |
 
+## Rozliczenie transakcji (Kafka)
+
+```
+Parkiet ──exchange.events──► konsument ──► exchange_inbox ──► rozliczenie (co 250 ms) ──► księga + zlecenie
+          klucz = spółka      offset po      UNIQUE (run_id,     TRADE → kupno / sprzedaż z prowizją
+                              zapisie        symbol, sequence)   CANCELLED / pełne wykonanie → zwolnienie reszty
+```
+
+```
+kupno 10 KGH po 140 zł (limit 150, blokada 1500 + 5,85)
+  Wn ClientBlocked:PLN   1405,46  │  Ma Bank:PLN           1400,00
+                                  │  Ma FeeIncome:PLN         5,46
+  Wn Depository:KGH         10    │  Ma ClientAvailable:KGH     10
+zwolnienie reszty
+  Wn ClientBlocked:PLN    100,39  │  Ma ClientAvailable:PLN  100,39
+```
+
+- **Inbox zamiast rozliczania w konsumencie.** Konsument tylko odkłada zdarzenie do tabeli i dopiero potem
+  zapisuje offset w Kafce — awaria w środku kończy się powtórką, którą `UNIQUE (run_id, symbol, sequence)`
+  odrzuca, a nigdy zgubionym zdarzeniem. Wiadomość nie do przyjęcia (zepsuty JSON, wartości spoza reguł brokera)
+  trafia do tabeli `exchange_dead_letters` z powodem — nie blokuje kolejki, ale też nie znika bez śladu;
+  `RESTED` i nieznane typy są pomijane, więc giełda może dodać nowe zdarzenie bez psucia brokera.
+- **Transakcja może przyjść przed numerem zlecenia.** Gdy żądanie do Parkietu skończyło się timeoutem, zlecenie
+  jest `unknown`, a jego transakcje już płyną. Zdarzenie, które nie pasuje do żadnego zlecenia, nie jest więc od
+  razu „nie nasze”: jeśli na tej spółce jest zlecenie w drodze, cała spółka czeka, aż reconciler pozna jego numer.
+  Inne spółki idą dalej.
+- **Kolejność w obrębie spółki.** Zdarzenia spółki są rozliczane po kolei; błąd (transakcja ponad to, co zostało
+  w zleceniu, kupno drożej albo sprzedaż taniej niż limit) zatrzymuje tylko tę spółkę i trafia do logu raz —
+  rozliczenie „na siłę” byłoby gorsze niż przestój. Przebieg bierze ograniczoną liczbę zdarzeń z **każdej** spółki,
+  więc stojąca spółka z setkami zdarzeń w kolejce nie zabiera miejsca pozostałym.
+- **Idempotencja na dwóch poziomach.** Dokument ma klucz `order:{id}:trade:{run}:{sequence}`, a zlecenie pamięta
+  ostatnie rozliczone zdarzenie. Dokument jest liczony ze stanu sprzed zdarzenia, a stan zmieniany po zaksięgowaniu —
+  powtórka po awarii między jednym a drugim daje identyczny dokument, więc księga odpowiada „już było”.
+- **Prowizja od całego wykonania**, nie od każdej transakcji: zlecenie wykonane w 10 kawałkach płaci minimum 3 zł raz,
+  więc nigdy nie przekroczy blokady. Nie więcej niż wartość — sprzedaż jednej akcji za 2 zł nie zadłuża klienta.
+- **Kupno poniżej limitu** zużywa mniej, niż zablokowano; resztę zwalnia pełne wykonanie albo anulowanie.
+- **Numer zlecenia giełdy** jest unikalny w spółce i przebiegu giełdy — po starcie Parkietu bez wznowienia
+  numeracja rusza od nowa. Broker bierze najnowsze otwarte zlecenie z tym numerem, które nie rozliczyło nic późniejszego.
+  Ograniczenie: Parkiet nie podaje przebiegu w odpowiedzi REST, więc zlecenia otwarte w chwili takiego restartu
+  (giełda o nich zapomina, nie wysyłając anulowania) zostają u brokera otwarte i trzeba je zamknąć ręcznie.
+- Bez `ExchangeEvents:BootstrapServers` broker działa bez Kafki (np. lokalnie bez giełdy) — zlecenia czekają.
+
+Zlecenie w API pokazuje wykonanie: `filledQuantity`, `filledValue`, `commission`, a status przechodzi
+`accepted` → `filled` albo `cancelled`.
+
 ## Uruchomienie
 
 ```bash
 docker compose up -d                          # PostgreSQL na porcie 5434
-# zlecenia ida do gieldy Parkiet: Exchange:BaseUrl (domyslnie http://localhost:8090/)
+# zlecenia ida do gieldy Parkiet: Exchange:BaseUrl (domyslnie http://localhost:8090/),
+# transakcje przychodza z jej Kafki: ExchangeEvents:BootstrapServers (w Development localhost:9092)
 dotnet run --project src/BrokerLedger.Api     # http://localhost:8091, migracje przy starcie (Development)
 
 curl -X POST localhost:8091/api/auth/register -H 'Content-Type: application/json' \
@@ -210,6 +256,10 @@ dotnet stryker -f stryker-api.json              # testy mutacyjne API na testach
 | Saga (jednostkowe) | każda ścieżka zlecenia na atrapach: brak środków, odmowa, 503 przy pierwszej próbie i po timeoucie, awaria przed zapisem blokady i przed zwolnieniem — dokończona bez dublowania, nieaktualna kopia nie nadpisze stanu |
 | E2E zleceń | HTTP → księga w PostgreSQL → Parkiet w pamięci z awariami na życzenie: 504 mimo przyjęcia, cisza, błąd sieci → reconciler wyjaśnia, na giełdzie zawsze jedno zlecenie |
 | Klient giełdy | mapowanie kodów HTTP Parkietu na decyzje sagi, format zlecenia, zepsuty JSON, anulowanie przez wołającego ≠ timeout |
+| Rozliczenie (jednostkowe) | częściowe i pełne wykonanie, anulowanie, transakcja między dwoma klientami brokera, zdarzenie nie do tego zlecenia, czekanie na zlecenie w drodze, awaria po zaksięgowaniu i przed zwolnieniem — dokończona powtórką |
+| Rozliczenie (FsCheck) | losowy podział zlecenia na transakcje po losowych cenach, czasem anulowane: blokada zawsze kończy na zerze, prowizja raz od całości, gotówka i akcje się zgadzają |
+| Kafka (integracyjne) | prawdziwa Kafka i PostgreSQL w Dockerze: format zdarzeń Parkietu, powtórki, zepsute wiadomości, offset po restarcie konsumenta, awaria bazy ponawiana |
+| E2E rozliczenia | HTTP → Parkiet w pamięci → zdarzenie na Kafce → skrzynka → księga → salda przez HTTP; także transakcja dla zlecenia `unknown`, która czeka na reconciler |
 | Mutacyjne | Stryker psuje kod i sprawdza, czy testy to wykryją — osobno domena, warstwa bazy i API |
 
 Na Windowsie z zainstalowanym Visual Studio 2022 Stryker bierze jego starszy MSBuild, który nie zna
