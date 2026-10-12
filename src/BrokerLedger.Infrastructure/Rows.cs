@@ -65,6 +65,11 @@ internal sealed class OrderRow
     public bool FundsBlocked { get; set; }
     public bool FundsReleased { get; set; }
     public int SubmitAttempts { get; set; }
+    public long FilledQuantity { get; set; }
+    public decimal FilledValue { get; set; }
+    public decimal FilledCommission { get; set; }
+    public long? LastEventRunId { get; set; }
+    public long? LastEventSequence { get; set; }
     public int Version { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }

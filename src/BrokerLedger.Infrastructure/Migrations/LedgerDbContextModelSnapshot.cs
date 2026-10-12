@@ -187,6 +187,18 @@ namespace BrokerLedger.Infrastructure.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("exchange_order_id");
 
+                    b.Property<decimal>("FilledCommission")
+                        .HasColumnType("numeric(20,2)")
+                        .HasColumnName("filled_commission");
+
+                    b.Property<long>("FilledQuantity")
+                        .HasColumnType("bigint")
+                        .HasColumnName("filled_quantity");
+
+                    b.Property<decimal>("FilledValue")
+                        .HasColumnType("numeric(20,2)")
+                        .HasColumnName("filled_value");
+
                     b.Property<bool>("FundsBlocked")
                         .HasColumnType("boolean")
                         .HasColumnName("funds_blocked");
@@ -194,6 +206,14 @@ namespace BrokerLedger.Infrastructure.Migrations
                     b.Property<bool>("FundsReleased")
                         .HasColumnType("boolean")
                         .HasColumnName("funds_released");
+
+                    b.Property<long?>("LastEventRunId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("last_event_run_id");
+
+                    b.Property<long?>("LastEventSequence")
+                        .HasColumnType("bigint")
+                        .HasColumnName("last_event_sequence");
 
                     b.Property<decimal?>("LimitPrice")
                         .HasColumnType("numeric(20,2)")
@@ -249,7 +269,7 @@ namespace BrokerLedger.Infrastructure.Migrations
 
                     b.HasIndex("UpdatedAt")
                         .HasDatabaseName("ix_orders_needing_attention")
-                        .HasFilter("status in ('Pending', 'Unknown') or (status = 'Rejected' and funds_blocked and not funds_released)");
+                        .HasFilter("status in ('Pending', 'Unknown') or (status in ('Rejected', 'Filled', 'Cancelled') and funds_blocked and not funds_released)");
 
                     b.HasIndex("ClientId", "ClientKey")
                         .IsUnique()
@@ -263,6 +283,10 @@ namespace BrokerLedger.Infrastructure.Migrations
 
                     b.ToTable("orders", null, t =>
                         {
+                            t.HasCheckConstraint("ck_orders_filled_within_quantity", "filled_quantity between 0 and quantity");
+
+                            t.HasCheckConstraint("ck_orders_last_event_complete", "(last_event_run_id is null) = (last_event_sequence is null)");
+
                             t.HasCheckConstraint("ck_orders_quantity_positive", "quantity > 0");
 
                             t.HasCheckConstraint("ck_orders_released_only_if_blocked", "not funds_released or funds_blocked");

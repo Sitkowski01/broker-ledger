@@ -20,6 +20,10 @@ internal sealed class LedgerDbContext(DbContextOptions<LedgerDbContext> options)
     public DbSet<ClientRow> Clients => Set<ClientRow>();
     public DbSet<OrderRow> Orders => Set<OrderRow>();
 
+    /// <summary>To samo co <see cref="Order.NeedsAttention"/>: niedokonczone albo skonczone z blokada do zwolnienia.</summary>
+    private const string NeedingAttentionFilter = "status in ('Pending', 'Unknown') "
+        + "or (status in ('Rejected', 'Filled', 'Cancelled') and funds_blocked and not funds_released)";
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<AccountRow>(account =>
@@ -73,13 +77,15 @@ internal sealed class LedgerDbContext(DbContextOptions<LedgerDbContext> options)
             order.Property(o => o.Status).HasConversion<string>().HasMaxLength(16);
             order.Property(o => o.LimitPrice).HasColumnType(AmountType);
             order.Property(o => o.BlockedAmount).HasColumnType(AmountType);
+            order.Property(o => o.FilledValue).HasColumnType(AmountType);
+            order.Property(o => o.FilledCommission).HasColumnType(AmountType);
             order.Property(o => o.RejectionReason).HasMaxLength(200);
             // Powtorka zadania z tym samym Idempotency-Key trafia na to samo zlecenie.
             order.HasIndex(o => new { o.ClientId, o.ClientKey }).IsUnique();
             order.HasIndex(o => new { o.ClientId, o.CreatedAt });
             // Reconciler pyta tylko o niedokonczone zlecenia — maly indeks zamiast skanu calej historii.
             order.HasIndex(o => o.UpdatedAt).HasDatabaseName("ix_orders_needing_attention")
-                .HasFilter("status in ('Pending', 'Unknown') or (status = 'Rejected' and funds_blocked and not funds_released)");
+                .HasFilter(NeedingAttentionFilter);
             // Rozliczenie transakcji z gieldy szuka zlecenia po jej numerze.
             order.HasIndex(o => new { o.Symbol, o.ExchangeOrderId });
             order.ToTable(t =>
@@ -87,6 +93,10 @@ internal sealed class LedgerDbContext(DbContextOptions<LedgerDbContext> options)
                 t.HasCheckConstraint("ck_orders_quantity_positive", "quantity > 0");
                 t.HasCheckConstraint("ck_orders_released_only_if_blocked", "not funds_released or funds_blocked");
                 t.HasCheckConstraint("ck_orders_submit_attempts_not_negative", "submit_attempts >= 0");
+                t.HasCheckConstraint("ck_orders_filled_within_quantity", "filled_quantity between 0 and quantity");
+                // Ostatnie zdarzenie to para (przebieg, numer) — albo cala, albo wcale.
+                t.HasCheckConstraint("ck_orders_last_event_complete",
+                    "(last_event_run_id is null) = (last_event_sequence is null)");
             });
         });
     }
