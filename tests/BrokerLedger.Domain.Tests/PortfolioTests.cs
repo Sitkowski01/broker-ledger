@@ -141,4 +141,69 @@ public class PortfolioTests
         Assert.Empty(portfolio.Positions);
         Assert.Equal(0m, portfolio.RealizedPnl);
     }
+
+    [Fact]
+    public void Selling_more_than_held_is_refused()
+    {
+        Buy("CDR", 1, 100m, 3m);
+        _history.Add(AsSeenBy(_client, new JournalEntry("sale",
+            Posting.Debit(AccountId.Available(_client, Asset.Shares("CDR")), 2),
+            Posting.Credit(AccountId.Depository("CDR"), 2)), 99));
+
+        Assert.Contains("is not a valid sale of 2 shares", Assert.Throws<InvalidOperationException>(Build).Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Sale_that_takes_cash_from_the_client_is_refused()
+    {
+        Buy("CDR", 2, 100m, 3m);
+        _history.Add(AsSeenBy(_client, new JournalEntry("odd",
+            Posting.Debit(AccountId.Available(_client, Asset.Shares("CDR")), 1),
+            Posting.Credit(AccountId.Depository("CDR"), 1),
+            Posting.Debit(AccountId.Available(_client, Pln), 1m),
+            Posting.Credit(AccountId.Bank(Currency.Pln), 1m)), 99));
+
+        Assert.Contains("is not a valid sale of 1 shares", Assert.Throws<InvalidOperationException>(Build).Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Purchase_that_pays_the_client_is_refused()
+    {
+        _history.Add(AsSeenBy(_client, new JournalEntry("odd",
+            Posting.Debit(AccountId.Depository("CDR"), 1),
+            Posting.Credit(AccountId.Available(_client, Asset.Shares("CDR")), 1),
+            Posting.Debit(AccountId.Bank(Currency.Pln), 1m),
+            Posting.Credit(AccountId.Available(_client, Pln), 1m)), 1));
+
+        Assert.Contains("adds shares and pays the client", Assert.Throws<InvalidOperationException>(Build).Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Entry_moving_two_companies_is_refused()
+    {
+        _history.Add(AsSeenBy(_client, new JournalEntry("swap",
+            Posting.Debit(AccountId.Depository("CDR"), 1),
+            Posting.Credit(AccountId.Available(_client, Asset.Shares("CDR")), 1),
+            Posting.Debit(AccountId.Depository("PKO"), 1),
+            Posting.Credit(AccountId.Available(_client, Asset.Shares("PKO")), 1)), 1));
+
+        Assert.Contains("moves shares of more than one company", Assert.Throws<InvalidOperationException>(Build).Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Cash_in_other_currencies_does_not_count_as_payment()
+    {
+        var eur = new Currency("EUR");
+        _history.Add(AsSeenBy(_client, new JournalEntry("eur purchase",
+            Posting.Debit(AccountId.Available(_client, Asset.Cash(eur)), 10m),
+            Posting.Credit(AccountId.Bank(eur), 10m),
+            Posting.Debit(AccountId.Depository("CDR"), 1),
+            Posting.Credit(AccountId.Available(_client, Asset.Shares("CDR")), 1)), 1));
+
+        Assert.Equal(new Position("CDR", 1, 0m, 0m), Assert.Single(Build().Positions));
+    }
+
+    [Fact]
+    public void Null_history_is_refused() =>
+        Assert.Equal("entries", Assert.Throws<ArgumentNullException>(() => Portfolio.FromHistory(null!)).ParamName);
 }
