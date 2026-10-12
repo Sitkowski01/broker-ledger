@@ -1,5 +1,7 @@
 # broker-ledger
 
+[![CI](https://github.com/Sitkowski01/broker-ledger/actions/workflows/ci.yml/badge.svg)](https://github.com/Sitkowski01/broker-ledger/actions/workflows/ci.yml)
+
 Dom maklerski przed giełdą [Parkiet](https://github.com/Sitkowski01/parkiet-exchange): rachunki
 klientów, księga podwójnego zapisu, blokada środków pod zlecenia i rozliczanie transakcji,
 które giełda publikuje w Kafce.
@@ -10,7 +12,33 @@ klient ──► broker-ledger ──zlecenie──► Parkiet (giełda) ──t
                └──────────────── rozliczenie ◄───────────────────────────┘
 ```
 
+## W 30 sekund
+
+- **Księga podwójnego zapisu** — każda operacja to dokument Wn = Ma, osobno w złotówkach i w akcjach. Saldo to suma
+  zapisów; historii nie da się zmienić nawet ręcznym SQL-em (trigger), a `CHECK` nie pozwoli zejść poniżej zera.
+- **Bez wyścigów** — konta blokowane `FOR NO KEY UPDATE` zawsze w kolejności id: z 20 równoległych wypłat po 10 zł
+  ze 100 zł przechodzi dokładnie 10, bez zakleszczeń. Każda operacja ma klucz idempotencji.
+- **Zlecenia jako saga** — blokada środków → Parkiet z `clientOrderId` → przyjęcie albo zwolnienie; timeout nie
+  zwalnia pieniędzy, tylko oddaje zlecenie reconcilerowi w tle.
+- **Rozliczenie z Kafki** — inbox z deduplikacją, kupno i sprzedaż z prowizją liczoną od całego wykonania, zwrot
+  niewykorzystanej blokady; transakcja, która przyszła przed numerem zlecenia, czeka zamiast przepaść.
+- **Testy** — 457: jednostkowe, własności (FsCheck), architektury, integracyjne na prawdziwym PostgreSQL i Kafce
+  (Testcontainers), e2e po HTTP; testy mutacyjne w CI na trzech warstwach (domena 99,6%, baza 98,2%, API 98,2%).
+
 C# / .NET 10, ASP.NET Core (minimal API, JWT, rate limiting), EF Core + PostgreSQL, Kafka (Confluent.Kafka), xUnit, FsCheck, Testcontainers, Stryker.NET.
+
+<details>
+<summary><b>In English</b></summary>
+
+broker-ledger is the brokerage in front of the [Parkiet](https://github.com/Sitkowski01/parkiet-exchange) stock
+exchange, written in C# / .NET 10. Client money and shares live in a double-entry ledger in PostgreSQL: every
+operation is a balanced journal entry, history is append-only (enforced by a trigger), balances never go negative,
+and concurrent withdrawals are serialized with row locks taken in a fixed order. Orders run as a saga — block funds,
+send to the exchange with a client order id, accept or release — with a background reconciler for timeouts. Trades
+come back from the exchange over Kafka (at least once) into an inbox and are settled idempotently, so each one is
+booked once: purchase and sale entries with a commission charged on the whole fill, and the unused part of the block returned. Tested with unit, property-based,
+architecture, integration (Testcontainers: PostgreSQL and Kafka) and end-to-end tests, plus mutation testing in CI.
+</details>
 
 ## Zakres
 
@@ -264,3 +292,7 @@ dotnet stryker -f stryker-api.json              # testy mutacyjne API na testach
 
 Na Windowsie z zainstalowanym Visual Studio 2022 Stryker bierze jego starszy MSBuild, który nie zna
 .NET 10 — wtedy `dotnet stryker --msbuild-path "C:/Program Files/dotnet/sdk/<wersja>/MSBuild.dll"`.
+
+## Licencja
+
+MIT — [LICENSE](LICENSE).
