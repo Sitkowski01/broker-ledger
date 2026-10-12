@@ -99,6 +99,7 @@ public sealed class BrokerApi : WebApplicationFactory<Program>, IAsyncLifetime
         builder.UseSetting("RateLimits:ClientPerMinute", "100000");
         builder.UseSetting("Exchange:BaseUrl", "http://parkiet.test/");
         builder.UseSetting("Orders:Reconciler:Enabled", "false");
+        builder.UseSetting("Orders:Settlement:Enabled", "false");
         // Reconciler bierze tylko zlecenia starsze niz timeout gieldy — w testach oba sa krotkie.
         builder.UseSetting("Exchange:Timeout", "00:00:00.200");
         builder.UseSetting("Orders:Reconciler:MinAge", "00:00:00.300");

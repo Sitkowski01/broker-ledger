@@ -54,6 +54,7 @@ public sealed class ProxyAndErrorTests(BrokerApi api)
     [InlineData("Exchange:Timeout", "00:00:00", "Exchange:BaseUrl and a positive Exchange:Timeout are required")]
     [InlineData("Orders:Reconciler:Interval", "00:00:00", "Orders:Reconciler needs a positive Interval and BatchSize")]
     [InlineData("Orders:Reconciler:MinAge", "00:00:00.200", "Orders:Reconciler:MinAge must be longer than Exchange:Timeout")]
+    [InlineData("Orders:Settlement:Interval", "00:00:00", "Orders:Settlement needs a positive Interval and BatchSize")]
     [InlineData("Exchange:BaseUrl", "http://gw/parkiet", "Exchange:BaseUrl must be an absolute URL ending with")]
     [InlineData("Exchange:BaseUrl", "parkiet/", "Exchange:BaseUrl must be an absolute URL ending with")]
     public void Bad_configuration_names_the_problem(string key, string value, string message)
@@ -63,6 +64,21 @@ public sealed class ProxyAndErrorTests(BrokerApi api)
         var ex = Assert.ThrowsAny<Exception>(() => broken.CreateClient());
 
         Assert.Contains(message, ex.ToString(), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("ExchangeEvents:Topic", " ", "topic")]
+    [InlineData("ExchangeEvents:GroupId", "", "groupId")]
+    [InlineData("ExchangeEvents:RetryDelay", "00:00:00", "retryDelay")]
+    public void Kafka_settings_are_checked_only_when_kafka_is_configured(string key, string value, string parameter)
+    {
+        using var withKafka = api.With(("ExchangeEvents:BootstrapServers", "localhost:1"), (key, value));
+        using var withoutKafka = api.With((key, value));
+
+        var ex = Assert.ThrowsAny<ArgumentException>(() => withKafka.CreateClient());
+
+        Assert.Equal(parameter, ex.ParamName);
+        withoutKafka.CreateClient().Dispose();
     }
 
     private static async Task<HttpStatusCode> LoginFrom(HttpClient http, string clientAddress)

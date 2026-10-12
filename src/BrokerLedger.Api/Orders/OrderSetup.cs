@@ -31,6 +31,20 @@ internal sealed class ReconcilerOptions
     public bool IsValid() => Interval > TimeSpan.Zero && MinAge >= TimeSpan.Zero && BatchSize > 0;
 }
 
+/// <summary>Sekcja <c>ExchangeEvents</c>: skad czytac zdarzenia gieldy (Kafka).</summary>
+internal sealed class ExchangeEventsOptions
+{
+    public const string Section = "ExchangeEvents";
+
+    public string? BootstrapServers { get; set; }
+
+    public string Topic { get; set; } = "exchange.events";
+
+    public string GroupId { get; set; } = "broker-ledger";
+
+    public TimeSpan RetryDelay { get; set; } = TimeSpan.FromSeconds(1);
+}
+
 internal static class OrderSetup
 {
     public static IServiceCollection AddBrokerOrders(this IServiceCollection services, IConfiguration configuration)
@@ -58,6 +72,20 @@ internal static class OrderSetup
             .Validate(o => o.MinAge > exchange.Timeout, "Orders:Reconciler:MinAge must be longer than Exchange:Timeout")
             .ValidateOnStart();
         services.AddHostedService<OrderReconciler>();
+
+        services.AddTransient<TradeSettlement>();
+        services.AddOptions<SettlementOptions>()
+            .Bind(configuration.GetSection(SettlementOptions.Section))
+            .Validate(o => o.IsValid(), "Orders:Settlement needs a positive Interval and BatchSize")
+            .ValidateOnStart();
+        services.AddHostedService<SettlementWorker>();
+
+        // Bez adresu Kafki broker dziala, tylko nie dostaje transakcji (np. lokalnie bez gieldy).
+        var events = configuration.GetSection(ExchangeEventsOptions.Section).Get<ExchangeEventsOptions>() ?? new ExchangeEventsOptions();
+        if (!string.IsNullOrWhiteSpace(events.BootstrapServers))
+        {
+            services.AddExchangeEventsConsumer(events.BootstrapServers, events.Topic, events.GroupId, events.RetryDelay);
+        }
         return services;
     }
 }
