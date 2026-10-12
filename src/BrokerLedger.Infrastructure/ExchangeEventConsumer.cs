@@ -98,7 +98,9 @@ internal sealed partial class ExchangeEventConsumer(
             }
             catch (Exception e) when (e is not OperationCanceledException || !stoppingToken.IsCancellationRequested)
             {
+                // Stryker disable once Statement : samo logowanie, bez wplywu na dzialanie
                 LogStoreFailure(logger, e);
+                // Stryker disable once Statement : przerwa zmienia tylko tempo ponowien, nie ich wynik
                 await Task.Delay(settings.RetryDelay, stoppingToken);
             }
         }
@@ -113,6 +115,7 @@ internal sealed partial class ExchangeEventConsumer(
         }
         catch (FormatException e)
         {
+            // Stryker disable once Statement : samo logowanie, wiadomosc i tak trafia do dead letters
             LogMalformed(logger, e, message);
             await deadLetters.AddAsync(message, e.Message, cancellationToken);
             return Intake.Malformed;

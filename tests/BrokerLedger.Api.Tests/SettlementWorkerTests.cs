@@ -95,6 +95,15 @@ public class SettlementWorkerTests
     }
 
     [Fact]
+    public void Kafka_defaults_match_parkiet()
+    {
+        var options = new ExchangeEventsOptions();
+
+        Assert.Equal(("exchange.events", "broker-ledger", TimeSpan.FromSeconds(1)), (options.Topic, options.GroupId, options.RetryDelay));
+        Assert.Null(options.BootstrapServers);
+    }
+
+    [Fact]
     public void Options_must_make_sense()
     {
         Assert.True(new SettlementOptions().IsValid());

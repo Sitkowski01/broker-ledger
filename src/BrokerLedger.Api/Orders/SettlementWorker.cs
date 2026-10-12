@@ -52,11 +52,13 @@ internal sealed partial class SettlementWorker(
         {
             await RunOnceAsync(stoppingToken);
         }
+        // Stryker disable Block : w bloku jest tylko logowanie
         catch (Exception e) when (e is not OperationCanceledException || !stoppingToken.IsCancellationRequested)
         {
             // Stryker disable once Statement : samo logowanie, bez wplywu na dzialanie
             LogPassFailure(logger, e);
         }
+        // Stryker restore Block
     }
 
     /// <summary>Jeden przebieg: ile zdarzen rozliczono.</summary>

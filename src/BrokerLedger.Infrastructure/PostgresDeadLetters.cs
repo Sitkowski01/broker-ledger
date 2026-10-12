@@ -17,6 +17,7 @@ internal sealed class PostgresDeadLetters(IDbContextFactory<LedgerDbContext> con
         db.DeadLetters.Add(new DeadLetterRow
         {
             Message = message,
+            // Stryker disable once Equality : przy dlugosci rownej limitowi obie galezie daja to samo
             Error = error.Length > MaxErrorLength ? error[..MaxErrorLength] : error,
             ReceivedAt = clock.GetUtcNow(),
         });

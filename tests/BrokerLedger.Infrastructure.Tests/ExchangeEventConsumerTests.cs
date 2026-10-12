@@ -105,6 +105,15 @@ public sealed class ExchangeEventConsumerTests(PostgresFixture postgres, KafkaFi
         Assert.Single(stored);
     }
 
+    [Theory]
+    [InlineData(" ", "t", "g", 1)]
+    [InlineData("k:9092", "", "g", 1)]
+    [InlineData("k:9092", "t", " ", 1)]
+    [InlineData("k:9092", "t", "g", 0)]
+    public void Consumer_needs_complete_settings(string servers, string topic, string group, int retrySeconds) =>
+        Assert.ThrowsAny<ArgumentException>(() => new Microsoft.Extensions.DependencyInjection.ServiceCollection()
+            .AddExchangeEventsConsumer(servers, topic, group, TimeSpan.FromSeconds(retrySeconds)));
+
     [Fact]
     public async Task Intake_tells_what_happened_to_each_message()
     {
