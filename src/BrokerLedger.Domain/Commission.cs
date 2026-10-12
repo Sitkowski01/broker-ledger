@@ -35,4 +35,21 @@ public sealed record Commission
         // Stryker disable once Equality : przy rownych kwotach obie galezie daja to samo
         return commission < Minimum ? Minimum : commission;
     }
+
+    /// <summary>
+    /// Prowizja nalezna od calego dotychczasowego wykonania zlecenia. Zlecenie wykonane w czesciach placi
+    /// raz od sumy — minimum nie nalicza sie od kazdej transakcji, wiec prowizja nie przekroczy blokady.
+    /// Nigdy wiecej niz sama wartosc: sprzedaz jednej akcji za 2 zl nie zadluza klienta.
+    /// </summary>
+    public Money ForFilled(Money filledValue)
+    {
+        ArgumentNullException.ThrowIfNull(filledValue);
+        if (filledValue.IsNegative)
+        {
+            throw new ArgumentOutOfRangeException(nameof(filledValue), filledValue, "filled value must not be negative");
+        }
+        var fee = For(filledValue);
+        // Stryker disable once Equality : przy rownych kwotach obie galezie daja to samo
+        return fee < filledValue ? fee : filledValue;
+    }
 }

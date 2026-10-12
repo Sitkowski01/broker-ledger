@@ -19,6 +19,19 @@ public partial class OrderTests
         Assert.Equal(Money.Pln(0m), new Commission(0m, Money.Pln(0m)).For(Money.Pln(5m)));
     }
 
+    [Fact]
+    public void Commission_on_a_filled_order_is_charged_once_and_never_exceeds_the_value()
+    {
+        Assert.Equal(Money.Pln(0m), Commission.Standard.ForFilled(Money.Pln(0m)));
+        Assert.Equal(Money.Pln(2m), Commission.Standard.ForFilled(Money.Pln(2m)));    // minimum 3 zl > wartosc
+        Assert.Equal(Money.Pln(3m), Commission.Standard.ForFilled(Money.Pln(3m)));
+        Assert.Equal(Money.Pln(3m), Commission.Standard.ForFilled(Money.Pln(500m)));
+        Assert.Equal(Money.Pln(9.77m), Commission.Standard.ForFilled(Money.Pln(2504m)));
+        Assert.Throws<ArgumentNullException>(() => Commission.Standard.ForFilled(null!));
+        Assert.Contains("must not be negative", Assert.Throws<ArgumentOutOfRangeException>(
+            () => Commission.Standard.ForFilled(Money.Pln(-0.01m))).Message, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("-0.01")]
     [InlineData("1")]
