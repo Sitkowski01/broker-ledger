@@ -18,11 +18,12 @@ internal sealed class PostgresOrderRepository(IDbContextFactory<LedgerDbContext>
         // ON CONFLICT zamiast "sprawdz, potem wstaw": dwie rownolegle powtorki zadania nie wstawia dwoch zlecen.
         await db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO orders (id, client_id, client_key, symbol, side, type, limit_price, quantity, blocked_amount,
-                                status, funds_blocked, funds_released, submit_attempts, version, created_at, updated_at)
+                                status, funds_blocked, funds_released, submit_attempts, filled_quantity, filled_value,
+                                filled_commission, version, created_at, updated_at)
             VALUES ({order.Id.Value}, {order.Client.Value}, {order.ClientKey}, {order.Symbol}, {order.Side.ToString()},
                     {order.Type.ToString()}, {order.LimitPrice}, {order.Quantity}, {order.BlockedAmount},
                     {order.Status.ToString()}, {order.FundsBlocked}, {order.FundsReleased}, {order.SubmitAttempts},
-                    {order.Version}, {now}, {now})
+                    {order.Execution.Quantity}, {order.Execution.Value}, {order.Execution.Commission}, {order.Version}, {now}, {now})
             ON CONFLICT (client_id, client_key) DO NOTHING
             """, cancellationToken);
         var row = await db.Orders.AsNoTracking()
@@ -64,6 +65,11 @@ internal sealed class PostgresOrderRepository(IDbContextFactory<LedgerDbContext>
                 .SetProperty(o => o.FundsBlocked, order.FundsBlocked)
                 .SetProperty(o => o.FundsReleased, order.FundsReleased)
                 .SetProperty(o => o.SubmitAttempts, order.SubmitAttempts)
+                .SetProperty(o => o.FilledQuantity, order.Execution.Quantity)
+                .SetProperty(o => o.FilledValue, order.Execution.Value)
+                .SetProperty(o => o.FilledCommission, order.Execution.Commission)
+                .SetProperty(o => o.LastEventRunId, order.Execution.LastEvent == null ? null : order.Execution.LastEvent.RunId)
+                .SetProperty(o => o.LastEventSequence, order.Execution.LastEvent == null ? null : order.Execution.LastEvent.Sequence)
                 .SetProperty(o => o.Version, order.Version + 1)
                 .SetProperty(o => o.UpdatedAt, clock.GetUtcNow()), cancellationToken);
         if (updated == 0)
@@ -80,7 +86,8 @@ internal sealed class PostgresOrderRepository(IDbContextFactory<LedgerDbContext>
         // Ten sam warunek co Order.NeedsAttention i filtr indeksu ix_orders_needing_attention.
         var rows = await db.Orders.AsNoTracking()
             .Where(o => o.Status == OrderStatus.Pending || o.Status == OrderStatus.Unknown
-                        || (o.Status == OrderStatus.Rejected && o.FundsBlocked && !o.FundsReleased))
+                        || ((o.Status == OrderStatus.Rejected || o.Status == OrderStatus.Filled || o.Status == OrderStatus.Cancelled)
+                            && o.FundsBlocked && !o.FundsReleased))
             .Where(o => o.UpdatedAt < updatedBefore)
             // Po ostatniej zmianie: kazda proba zapisuje sie przed wyslaniem, wiec zlecenie, ktore ciagle
             // sie nie udaje, przesuwa sie na koniec i nie blokuje pozostalych.
@@ -94,5 +101,7 @@ internal sealed class PostgresOrderRepository(IDbContextFactory<LedgerDbContext>
         new OrderId(row.Id), new ClientId(row.ClientId), row.ClientKey,
         new OrderRequest(row.Symbol, row.Side, row.Type, row.LimitPrice, row.Quantity),
         row.BlockedAmount, row.Status, row.ExchangeOrderId, row.RejectionReason,
-        row.FundsBlocked, row.FundsReleased, row.SubmitAttempts, row.Version);
+        row.FundsBlocked, row.FundsReleased, row.SubmitAttempts, row.Version,
+        new OrderExecution(row.FilledQuantity, row.FilledValue, row.FilledCommission,
+            row.LastEventRunId is { } run && row.LastEventSequence is { } sequence ? new EventPosition(run, sequence) : null));
 }

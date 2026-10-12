@@ -58,11 +58,9 @@ public sealed class OrderSaga(IOrderRepository orders, ILedgerStore ledger, IExc
             await SaveAsync(order, cancellationToken);
         }
 
-        if (order.Status == OrderStatus.Rejected && order.FundsBlocked && !order.FundsReleased)
+        if (order.AwaitsRelease)
         {
-            await ledger.PostAsync(order.ReleaseKey, order.ReleaseEntry(), cancellationToken);
-            order.MarkFundsReleased();
-            await SaveAsync(order, cancellationToken);
+            await ReleaseAsync(order, orders, ledger, cancellationToken);
         }
 
         return order;
@@ -88,9 +86,26 @@ public sealed class OrderSaga(IOrderRepository orders, ILedgerStore ledger, IExc
         return reply;
     }
 
-    private async Task SaveAsync(Order order, CancellationToken cancellationToken)
+    /// <summary>
+    /// Zwraca klientowi reszte blokady skonczonego zlecenia. Wspolne dla sagi (odmowa) i rozliczenia
+    /// (wykonanie, anulowanie) — oba moga dokonczyc zwolnienie, ktore drugie przerwala awaria.
+    /// </summary>
+    internal static async Task ReleaseAsync(Order order, IOrderRepository orders, ILedgerStore ledger,
+        CancellationToken cancellationToken)
+    {
+        if (order.ReleaseEntry() is { } release)
+        {
+            await ledger.PostAsync(order.ReleaseKey, release, cancellationToken);
+        }
+        order.MarkFundsReleased();
+        await SaveAsync(order, orders, cancellationToken);
+    }
+
+    internal static async Task SaveAsync(Order order, IOrderRepository orders, CancellationToken cancellationToken)
     {
         await orders.SaveAsync(order, cancellationToken);
         order.MarkSaved();
     }
+
+    private Task SaveAsync(Order order, CancellationToken cancellationToken) => SaveAsync(order, orders, cancellationToken);
 }

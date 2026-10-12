@@ -4,7 +4,7 @@ namespace BrokerLedger.Domain;
 /// Zlecenie klienta i jego droga na gielde (saga): blokada srodkow → wyslanie → przyjecie albo odmowa.
 /// Kazdy krok ma klucz idempotencji, wiec po awarii mozna go bezpiecznie powtorzyc.
 /// </summary>
-public sealed class Order
+public sealed partial class Order
 {
     /// <summary>Najwyzsza cena na Parkiecie: 10 mln zl.</summary>
     public const decimal MaxPrice = 10_000_000m;
@@ -44,6 +44,7 @@ public sealed class Order
     public string? RejectionReason { get; private set; }
     public bool FundsBlocked { get; private set; }
     public bool FundsReleased { get; private set; }
+    public OrderExecution Execution { get; private set; } = OrderExecution.None;
 
     /// <summary>
     /// Ile razy zlecenie poszlo (albo moglo pojsc) na gielde. Zapisywane PRZED wyslaniem: tylko przy pierwszej
@@ -63,8 +64,17 @@ public sealed class Order
     public string ReleaseKey => $"order:{Id}:release";
 
     /// <summary>Czy reconciler ma tu cos dokonczyc: zablokowac, wyslac, wyjasnic albo zwolnic blokade.</summary>
-    public bool NeedsAttention => Status is OrderStatus.Pending or OrderStatus.Unknown
-        || (Status == OrderStatus.Rejected && FundsBlocked && !FundsReleased);
+    public bool NeedsAttention => Status is OrderStatus.Pending or OrderStatus.Unknown || AwaitsRelease;
+
+    /// <summary>Zlecenie sie skonczylo (odmowa, wykonanie, anulowanie), a reszta blokady jeszcze nie wrocila.</summary>
+    public bool AwaitsRelease => Status is OrderStatus.Rejected or OrderStatus.Filled or OrderStatus.Cancelled
+        && FundsBlocked && !FundsReleased;
+
+    /// <summary>
+    /// Zlecenie moglo juz trafic na gielde, a broker nie zna jeszcze jego numeru. Zdarzenia gieldy z tej spolki,
+    /// ktore do niczego nie pasuja, moga byc wlasnie jego — rozliczenie musi na nie poczekac.
+    /// </summary>
+    public bool IsInFlight => Status == OrderStatus.Unknown || (Status == OrderStatus.Pending && SubmitAttempts > 0);
 
     /// <summary>Nowe zlecenie. Kupno PKC nie przechodzi: bez limitu ceny nie wiadomo, ile zablokowac.</summary>
     public static Order Place(OrderId id, ClientId client, string clientKey, OrderRequest request, Commission commission)
@@ -108,9 +118,10 @@ public sealed class Order
     /// <summary>Odtworzenie z bazy — bez regul skladania, bo stan juz kiedys je przeszedl.</summary>
     public static Order Restore(OrderId id, ClientId client, string clientKey, OrderRequest request,
         decimal blockedAmount, OrderStatus status, long? exchangeOrderId, string? rejectionReason,
-        bool fundsBlocked, bool fundsReleased, int submitAttempts, int version) =>
+        bool fundsBlocked, bool fundsReleased, int submitAttempts, int version, OrderExecution execution) =>
         new(id, client, clientKey, request, blockedAmount)
         {
+            Execution = execution ?? throw new ArgumentNullException(nameof(execution)),
             Status = status,
             ExchangeOrderId = exchangeOrderId,
             RejectionReason = rejectionReason,
@@ -163,15 +174,18 @@ public sealed class Order
         RejectionReason = reason;
     }
 
-    public JournalEntry ReleaseEntry()
+    /// <summary>Zwolnienie tego, co zostalo z blokady; null, gdy nie zostalo nic (np. sprzedaz wykonana w calosci).</summary>
+    public JournalEntry? ReleaseEntry()
     {
-        Require(Status == OrderStatus.Rejected && FundsBlocked && !FundsReleased, "release funds");
-        return JournalEntries.Release(Client, BlockedAsset, BlockedAmount);
+        Require(AwaitsRelease, "release funds");
+        var remaining = RemainingBlocked;
+        return remaining == 0m ? null : JournalEntries.Release(Client, BlockedAsset, remaining);
     }
 
     public void MarkFundsReleased()
     {
-        Require(Status == OrderStatus.Rejected && FundsBlocked, "mark funds released");
+        Require(Status is OrderStatus.Rejected or OrderStatus.Filled or OrderStatus.Cancelled && FundsBlocked,
+            "mark funds released");
         FundsReleased = true;
     }
 

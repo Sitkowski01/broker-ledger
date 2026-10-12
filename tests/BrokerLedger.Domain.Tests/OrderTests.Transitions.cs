@@ -43,7 +43,7 @@ public partial class OrderTests
         order.MarkFundsBlocked();
         order.Reject("busy");
 
-        Assert.Equal(JournalEntries.Release(Client, Asset.Cash(Currency.Pln), order.BlockedAmount).Postings, order.ReleaseEntry().Postings);
+        Assert.Equal(JournalEntries.Release(Client, Asset.Cash(Currency.Pln), order.BlockedAmount).Postings, order.ReleaseEntry()!.Postings);
         order.MarkFundsReleased();
 
         Assert.False(order.NeedsAttention);
@@ -88,9 +88,14 @@ public partial class OrderTests
     {
         var id = OrderId.New();
 
-        var order = Order.Restore(id, Client, "k", BuyLimit, 99m, OrderStatus.Rejected, 5, "busy", true, false, 2, 3);
+        var execution = new OrderExecution(4, 1000m, 3.9m, new EventPosition(1, 8));
+
+        var order = Order.Restore(id, Client, "k", BuyLimit, 99m, OrderStatus.Rejected, 5, "busy", true, false, 2, 3, execution);
 
         Assert.Equal((id, Client, "k", BuyLimit, 99m), (order.Id, order.Client, order.ClientKey, order.Request, order.BlockedAmount));
+        Assert.Same(execution, order.Execution);
+        Assert.Throws<ArgumentNullException>(() =>
+            Order.Restore(id, Client, "k", BuyLimit, 99m, OrderStatus.Rejected, 5, "busy", true, false, 2, 3, null!));
         Assert.Equal((OrderStatus.Rejected, (long?)5, "busy", true, false, 2, 3),
             (order.Status, order.ExchangeOrderId, order.RejectionReason, order.FundsBlocked, order.FundsReleased, order.SubmitAttempts, order.Version));
         Assert.Equal(("CDR", OrderSide.Buy, OrderType.Limit, (decimal?)250.40m, 10L),
