@@ -84,6 +84,8 @@ public sealed class TestDatabase(string connectionString) : IAsyncDisposable
 
     internal PostgresOrderRepository Orders(TimeProvider? clock = null) => new(_contexts, clock ?? TimeProvider.System);
 
+    internal PostgresExchangeInbox Inbox() => new(_contexts, TimeProvider.System);
+
     internal PostgresDeadLetters DeadLetters() => new(_contexts, TimeProvider.System);
 
     internal LedgerDbContext Context() => _contexts.CreateDbContext();
