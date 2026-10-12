@@ -2,6 +2,7 @@ using BrokerLedger.Domain;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Logging;
 
 namespace BrokerLedger.Infrastructure;
 
@@ -20,6 +21,39 @@ public static class LedgerInfrastructure
         services.AddSingleton<IExchangeInbox, PostgresExchangeInbox>();
         services.AddSingleton<PostgresDeadLetters>();
         services.AddSingleton<IMarketPrices, PostgresMarketPrices>();
+        return services;
+    }
+
+    /// <summary>Nazwa klienta HTTP do NBP — testy podmieniaja pod nia serwer.</summary>
+    public const string NbpHttpClient = "Nbp";
+
+    /// <summary>
+    /// Kursy srednie NBP. Inaczej niz przy gieldzie ponowienia sa tu bezpieczne: GET niczego nie zmienia.
+    /// Kazda proba ma wlasny limit czasu, a bezpiecznik po serii bledow przestaje meczyc lezace API.
+    /// </summary>
+    public static IServiceCollection AddNbpExchangeRates(this IServiceCollection services, Uri baseUrl,
+        TimeSpan attemptTimeout, TimeSpan cacheFor, TimeSpan retryAfter)
+    {
+        ArgumentNullException.ThrowIfNull(baseUrl);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(attemptTimeout, TimeSpan.Zero);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(cacheFor, TimeSpan.Zero);
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(retryAfter, TimeSpan.Zero);
+        services.AddHttpClient(NbpHttpClient, http => http.BaseAddress = baseUrl)
+            .AddStandardResilienceHandler(options =>
+            {
+                options.Retry.MaxRetryAttempts = 2;
+                options.Retry.Delay = TimeSpan.FromMilliseconds(200);
+                options.AttemptTimeout.Timeout = attemptTimeout;
+                // Trzy proby z przerwami musza sie zmiescic w limicie calosci.
+                options.TotalRequestTimeout.Timeout = attemptTimeout * 3 + TimeSpan.FromSeconds(1);
+                // Biblioteka wymaga okna bezpiecznika co najmniej dwa razy dluzszego niz jedna proba.
+                options.CircuitBreaker.SamplingDuration = TimeSpan.FromTicks(Math.Max(TimeSpan.FromSeconds(30).Ticks, attemptTimeout.Ticks * 2));
+                options.CircuitBreaker.MinimumThroughput = 5;
+            });
+        services.AddSingleton<IExchangeRates>(provider => new CachedExchangeRates(
+            ct => new NbpTableSource(provider.GetRequiredService<IHttpClientFactory>().CreateClient(NbpHttpClient)).LatestAsync(ct),
+            provider.GetRequiredService<TimeProvider>(), cacheFor, retryAfter,
+            provider.GetRequiredService<ILogger<CachedExchangeRates>>()));
         return services;
     }
 
