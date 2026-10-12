@@ -172,4 +172,139 @@ public class TradeSettlementTests
         Assert.True((await ReadAsync(order)).FundsReleased);
         Assert.Equal(0m, Balance(AccountId.Blocked(_client, Pln)));
     }
+
+    [Fact]
+    public async Task Finished_order_with_a_recycled_number_is_not_matched_again()
+    {
+        var old = await AcceptedAsync(7, quantity: 1, key: "old");
+        await _settlement.SettleAsync(Trade(1, 99, 7, 1));
+        var current = await AcceptedAsync(7, quantity: 2, key: "new");
+
+        await _settlement.SettleAsync(new ExchangeEvent.Trade("CDR", new EventPosition(2, 1), 99, 7, OrderSide.Buy, 250m, 2));
+
+        Assert.Equal((1L, 2L), ((await ReadAsync(old)).Execution.Quantity, (await ReadAsync(current)).Execution.Quantity));
+    }
+
+    [Fact]
+    public async Task Of_two_open_orders_with_one_number_the_newer_one_is_settled()
+    {
+        // Zlecenie z poprzedniego przebiegu gieldy zostalo otwarte u brokera, choc gieldy juz go nie zna.
+        var stale = await AcceptedAsync(7, quantity: 5, key: "stale");
+        var current = await AcceptedAsync(7, quantity: 5, key: "current");
+
+        await _settlement.SettleAsync(new ExchangeEvent.Trade("CDR", new EventPosition(2, 1), 99, 7, OrderSide.Buy, 250m, 2));
+
+        Assert.Equal((0L, 2L), ((await ReadAsync(stale)).Execution.Quantity, (await ReadAsync(current)).Execution.Quantity));
+    }
+
+    [Fact]
+    public async Task Later_event_of_another_order_does_not_count_as_this_one_settled()
+    {
+        // Zdarzenie (1, 900) czeka w skrzynce, a nowsze zlecenie z tym samym numerem rozliczylo juz (2, 3).
+        var older = await AcceptedAsync(5, quantity: 3, key: "older");
+        var newer = await AcceptedAsync(5, quantity: 3, key: "newer");
+        await _settlement.SettleAsync(new ExchangeEvent.Trade("CDR", new EventPosition(2, 3), 99, 5, OrderSide.Buy, 250m, 1));
+
+        await _settlement.SettleAsync(new ExchangeEvent.Cancelled("CDR", new EventPosition(1, 900), 5, 3, "REQUESTED"));
+
+        Assert.Equal((OrderStatus.Cancelled, 1L), ((await ReadAsync(older)).Status, (await ReadAsync(newer)).Execution.Quantity));
+    }
+
+    [Fact]
+    public async Task Order_accepted_while_its_trade_is_being_matched_is_not_taken_for_a_stranger()
+    {
+        var sending = Order.Place(OrderId.New(), _client, "sending",
+            new OrderRequest("CDR", OrderSide.Buy, OrderType.Limit, 250m, 2), Commission.Standard);
+        await _ledger.PostAsync(sending.BlockKey, sending.BlockEntry());
+        sending.MarkFundsBlocked();
+        sending.BeginSubmission();
+        _orders.Put(sending);
+        // Odpowiedz REST przychodzi dokladnie miedzy wyszukaniem po numerze a dalszymi krokami rozliczenia.
+        _orders.AfterLookup = () =>
+        {
+            sending.Accept(55);
+            _orders.Put(sending);
+            _orders.AfterLookup = null;
+        };
+
+        Assert.Equal(SettleOutcome.Waiting, await _settlement.SettleAsync(Trade(1, 99, 55, 2)));
+        Assert.Equal(SettleOutcome.Settled, await _settlement.SettleAsync(Trade(1, 99, 55, 2)));
+        Assert.Equal(OrderStatus.Filled, (await ReadAsync(sending)).Status);
+    }
+
+    [Fact]
+    public async Task Later_event_of_a_symbol_does_not_overtake_one_that_waits()
+    {
+        var open = await AcceptedAsync(7, quantity: 2);
+        var inFlight = Order.Place(OrderId.New(), _client, "w", new OrderRequest("CDR", OrderSide.Buy, OrderType.Limit, 1m, 1), Commission.Standard);
+        inFlight.MarkFundsBlocked();
+        inFlight.BeginSubmission();
+        _orders.Put(inFlight);
+        await _inbox.AddAsync(Trade(1, 98, 99, 1)); // moze byc zleceniem w drodze
+        await _inbox.AddAsync(Trade(2, 98, 7, 1));  // nasze, ale pozniejsze — musi poczekac w kolejce
+
+        var pass = await _settlement.SettlePendingAsync(10);
+
+        Assert.Equal(0, pass.Settled);
+        Assert.Equal(0L, (await ReadAsync(open)).Execution.Quantity);
+        await Assert.ThrowsAsync<ArgumentNullException>(() => _settlement.SettleAsync(null!));
+    }
+
+    [Fact]
+    public async Task Pass_takes_a_limited_number_of_events_from_each_symbol()
+    {
+        var inFlight = Order.Place(OrderId.New(), _client, "w", new OrderRequest("PKN", OrderSide.Buy, OrderType.Limit, 1m, 1), Commission.Standard);
+        inFlight.MarkFundsBlocked();
+        inFlight.BeginSubmission();
+        _orders.Put(inFlight);
+        for (var i = 1; i <= 5; i++)
+        {
+            await _inbox.AddAsync(Trade(i, 98, 99, 1, symbol: "PKN"));
+        }
+        await _inbox.AddAsync(Trade(1, 98, 99, 1));
+
+        var pass = await _settlement.SettlePendingAsync(2);
+
+        // Stojaca spolka z kolejka zdarzen nie zabiera calej porcji — CDR i tak jest rozliczone.
+        Assert.Equal(1, pass.Settled);
+        Assert.Equal("CDR", Assert.Single(_inbox.Settled).Symbol);
+    }
+
+    [Fact]
+    public async Task Pass_settles_in_order_and_stops_only_the_symbol_that_failed()
+    {
+        await AcceptedAsync(7, quantity: 2);
+        await _inbox.AddAsync(Trade(1, 99, 7, 50));                // wiecej niz zlecenie — blad
+        await _inbox.AddAsync(Trade(2, 99, 7, 1));                 // ta sama spolka: czeka za bledem
+        await _inbox.AddAsync(Trade(1, 98, 99, 1, symbol: "PKN")); // inna spolka idzie dalej
+
+        var pass = await _settlement.SettlePendingAsync(10);
+
+        Assert.Equal(1, pass.Settled);
+        Assert.IsType<ExchangeEventMismatchException>(Assert.Single(pass.Failures).Error);
+        Assert.Equal("PKN", Assert.Single(_inbox.Settled).Symbol);
+        Assert.Equal(2, (await _inbox.PendingAsync(10)).Count);
+    }
+
+    [Fact]
+    public async Task Pass_leaves_waiting_and_contended_symbols_for_later()
+    {
+        await AcceptedAsync(7, quantity: 2);
+        var inFlight = Order.Place(OrderId.New(), _client, "w", new OrderRequest("PKN", OrderSide.Buy, OrderType.Limit, 1m, 1), Commission.Standard);
+        inFlight.MarkFundsBlocked();
+        inFlight.BeginSubmission();
+        _orders.Put(inFlight);
+        await _inbox.AddAsync(Trade(1, 98, 99, 1, symbol: "PKN")); // moze byc zleceniem w drodze — czeka
+        await _inbox.AddAsync(Trade(1, 99, 7, 1));                 // zlecenie wlasnie zmienia reconciler
+        await _inbox.AddAsync(Trade(2, 99, 7, 1));                 // czeka za poprzednim
+        await _inbox.AddAsync(Trade(1, 1, 2, 1, symbol: "ALE"));   // nie nasze
+        _orders.ConflictOnSave = _orders.Saves + 1;
+
+        var pass = await _settlement.SettlePendingAsync(10);
+
+        // Konflikt wersji to nie blad — zwykle ponowienie w nastepnym przebiegu.
+        Assert.Equal((1, 0), (pass.Settled, pass.Failures.Count));
+        Assert.Equal(["PKN", "CDR", "CDR"], (await _inbox.PendingAsync(10)).Select(e => e.Symbol));
+        Assert.Equal(2, (await _settlement.SettlePendingAsync(10)).Settled);
+    }
 }
