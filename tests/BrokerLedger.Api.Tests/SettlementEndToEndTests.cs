@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -158,8 +159,34 @@ public sealed class SettlementEndToEndTests(KafkaBrokerApi api)
     private static async Task<JsonElement> GetAsync(HttpClient http, Guid order) =>
         await (await http.GetAsync(new Uri($"/api/me/orders/{order}", UriKind.Relative))).JsonAsync();
 
-    private static Task<JsonElement> WaitForStatusAsync(HttpClient http, Guid order, string status) =>
-        WaitForAsync(http, order, o => Text(o, "status") == status);
+    /// <summary>
+    /// Stan koncowy (filled / cancelled) jest zapisywany przed zwolnieniem reszty blokady — najpierw status, potem
+    /// pieniadze. Dlatego po nim czekamy jeszcze, az klient (jedno zlecenie na test) nie ma nic zablokowanego.
+    /// </summary>
+    private static async Task<JsonElement> WaitForStatusAsync(HttpClient http, Guid order, string status)
+    {
+        var reached = await WaitForAsync(http, order, o => Text(o, "status") == status);
+        if (status is "filled" or "cancelled")
+        {
+            await WaitForNothingBlockedAsync(http);
+        }
+        return reached;
+    }
+
+    private static async Task WaitForNothingBlockedAsync(HttpClient http)
+    {
+        var deadline = DateTime.UtcNow + Patience;
+        while (true)
+        {
+            var balances = await (await http.GetAsync(new Uri("/api/me/balances", UriKind.Relative))).JsonAsync();
+            if (balances.EnumerateArray().All(b => decimal.Parse(Text(b, "blocked")!, CultureInfo.InvariantCulture) == 0m))
+            {
+                return;
+            }
+            Assert.True(DateTime.UtcNow < deadline, $"block never released, last seen: {balances}");
+            await Task.Delay(100);
+        }
+    }
 
     /// <summary>Rozliczenie idzie w tle (Kafka → skrzynka → przebieg co 50 ms), wiec czekamy na jego efekt.</summary>
     private static async Task<JsonElement> WaitForAsync(HttpClient http, Guid order, Func<JsonElement, bool> done)
