@@ -106,7 +106,8 @@ internal static class OrderEndpoints
         return await saga.CancelAsync(order, ct) switch
         {
             // Srodki zwolni zdarzenie anulowania z gieldy — dopiero ono mowi, ile zdazylo sie zrealizowac.
-            CancelReply.Cancelled => Results.Accepted(value: OrderView.Of(order)),
+            // Stan z bazy: rozliczenie moglo juz w tym czasie zamknac zlecenie.
+            CancelReply.Cancelled => Results.Accepted(value: OrderView.Of((await orders.GetAsync(order.Id, ct))!)),
             CancelReply.NotOpen => Results.Problem(statusCode: StatusCodes.Status409Conflict, title: "Order is not open"),
             _ => Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable,
                 title: "Exchange did not answer, try again"),

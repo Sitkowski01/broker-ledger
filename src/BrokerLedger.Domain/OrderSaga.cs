@@ -81,7 +81,15 @@ public sealed class OrderSaga(IOrderRepository orders, ILedgerStore ledger, IExc
         if (reply == CancelReply.Cancelled)
         {
             order.RequestCancel();
-            await SaveAsync(order, cancellationToken);
+            try
+            {
+                await SaveAsync(order, cancellationToken);
+            }
+            catch (OrderConcurrencyException)
+            {
+                // Gielda juz anulowala, a rozliczenie zdazylo przetworzyc jej zdarzenie (anulowanie albo transakcje)
+                // przed naszym zapisem. Anulowanie sie udalo — stan zlecenia ustala teraz rozliczenie.
+            }
         }
         return reply;
     }

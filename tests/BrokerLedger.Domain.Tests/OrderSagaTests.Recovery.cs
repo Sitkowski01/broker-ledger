@@ -83,6 +83,18 @@ public partial class OrderSagaTests
         Assert.Single(_exchange.Cancelled);
     }
 
+    [Fact]
+    public async Task Cancel_overtaken_by_settlement_still_succeeded()
+    {
+        _exchange.Then(new ExchangeReply.Accepted(11)).ThenCancel(CancelReply.Cancelled);
+        var order = await PlaceAsync(NewBuy());
+        // Zdarzenie anulowania z gieldy rozliczono, zanim saga zapisala prosbe — zapis przegrywa wyscig o wersje.
+        _orders.ConflictOnSave = _orders.Saves + 1;
+
+        Assert.Equal(CancelReply.Cancelled, await _saga.CancelAsync(order));
+        Assert.Equal(OrderStatus.Accepted, (await _orders.GetAsync(order.Id))!.Status);
+    }
+
     [Theory]
     [InlineData(CancelReply.NotOpen)]
     [InlineData(CancelReply.NoAnswer)]
