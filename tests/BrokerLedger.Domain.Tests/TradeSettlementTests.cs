@@ -133,6 +133,34 @@ public class TradeSettlementTests
     }
 
     [Fact]
+    public async Task Event_with_both_sides_found_does_not_wait_for_an_order_in_flight()
+    {
+        await AcceptedAsync(7, OrderSide.Buy, 5, "buy");
+        await AcceptedAsync(8, OrderSide.Sell, 5, "sell");
+        var inFlight = Order.Place(OrderId.New(), _client, "in-flight",
+            new OrderRequest("CDR", OrderSide.Buy, OrderType.Limit, 10m, 1), Commission.Standard);
+        inFlight.MarkFundsBlocked();
+        inFlight.BeginSubmission();
+        _orders.Put(inFlight);
+
+        // Obie strony to znane zlecenia, wiec zlecenie "w drodze" nie moze byc zadna z nich.
+        Assert.Equal(SettleOutcome.Settled, await _settlement.SettleAsync(Trade(1, maker: 8, taker: 7, quantity: 5)));
+    }
+
+    [Fact]
+    public async Task Repeat_goes_to_the_order_that_settled_it_even_if_a_newer_one_has_the_number()
+    {
+        var settled = await AcceptedAsync(7, quantity: 5, key: "settled");
+        await _settlement.SettleAsync(Trade(1, 99, 7, 2));
+        // Gielda ruszyla bez wznowienia i dala ten sam numer nowemu zleceniu; potem wraca powtorka starego zdarzenia.
+        var newer = await AcceptedAsync(7, quantity: 5, key: "newer");
+
+        await _settlement.SettleAsync(Trade(1, 99, 7, 2));
+
+        Assert.Equal((2L, 0L), ((await ReadAsync(settled)).Execution.Quantity, (await ReadAsync(newer)).Execution.Quantity));
+    }
+
+    [Fact]
     public async Task Repeated_event_changes_nothing()
     {
         var order = await AcceptedAsync(7);
