@@ -3,12 +3,22 @@ namespace BrokerLedger.Domain;
 /// <summary>Cena ostatniej transakcji na gieldzie i kiedy broker sie o niej dowiedzial.</summary>
 public sealed record MarketPrice(decimal Price, DateTimeOffset At);
 
+/// <summary>Notowanie do paska kursow: ostatnia cena i poprzednia, z ktorej widac kierunek zmiany.</summary>
+public sealed record Quote(string Symbol, decimal Price, decimal? PreviousPrice, DateTimeOffset At)
+{
+    /// <summary>1 gdy cena wzrosla, -1 gdy spadla, 0 gdy bez zmian albo to pierwsza transakcja.</summary>
+    public int Direction => PreviousPrice is { } previous ? Math.Sign(Price - previous) : 0;
+}
+
 /// <summary>Ostatnie ceny spolek — z transakcji, ktore broker i tak dostaje z gieldy do rozliczenia.</summary>
 public interface IMarketPrices
 {
     /// <summary>Tylko spolki, na ktorych byla jakas transakcja; reszty nie ma w slowniku.</summary>
     Task<IReadOnlyDictionary<string, MarketPrice>> LastPricesAsync(
         IReadOnlyCollection<string> symbols, CancellationToken cancellationToken = default);
+
+    /// <summary>Notowania wszystkich spolek z transakcjami, alfabetycznie, najwyzej <paramref name="limit"/>.</summary>
+    Task<IReadOnlyList<Quote>> QuotesAsync(int limit, CancellationToken cancellationToken = default);
 }
 
 /// <summary>

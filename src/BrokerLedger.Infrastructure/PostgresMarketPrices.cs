@@ -31,4 +31,27 @@ internal sealed class PostgresMarketPrices(IDbContextFactory<LedgerDbContext> co
             .ToListAsync(cancellationToken);
         return rows.ToDictionary(r => r.Symbol, r => new MarketPrice(r.Price!.Value, r.ReceivedAt));
     }
+
+    public async Task<IReadOnlyList<Quote>> QuotesAsync(int limit, CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken);
+        // Dla kazdej spolki dwa skoki po indeksie (symbol, id DESC): ostatnia transakcja i ta tuz przed nia.
+        var rows = await db.Database.SqlQuery<QuoteRow>($"""
+                SELECT s.symbol, t.price, p.price AS previous_price, t.received_at AS at
+                FROM (SELECT DISTINCT symbol FROM exchange_inbox WHERE type = 'TRADE') s
+                CROSS JOIN LATERAL (
+                    SELECT id, price, received_at FROM exchange_inbox
+                    WHERE type = 'TRADE' AND symbol = s.symbol ORDER BY id DESC LIMIT 1) t
+                LEFT JOIN LATERAL (
+                    SELECT price FROM exchange_inbox
+                    WHERE type = 'TRADE' AND symbol = s.symbol AND id < t.id ORDER BY id DESC LIMIT 1) p ON true
+                ORDER BY s.symbol
+                LIMIT {limit}
+                """)
+            .ToListAsync(cancellationToken);
+        return rows.Select(r => new Quote(r.Symbol, r.Price, r.PreviousPrice, r.At)).ToList();
+    }
+
+    private sealed record QuoteRow(string Symbol, decimal Price, decimal? PreviousPrice, DateTimeOffset At);
 }

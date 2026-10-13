@@ -54,3 +54,17 @@ public class LedgerKeyTests
         Assert.Throws<ArgumentNullException>(() => Order.OfLedgerKey(null!));
     }
 }
+
+public class QuoteTests
+{
+    [Theory]
+    [InlineData(101, 100, 1)]
+    [InlineData(99.99, 100, -1)]
+    [InlineData(100, 100, 0)]
+    public void Direction_compares_with_the_previous_trade(decimal price, decimal previous, int direction) =>
+        Assert.Equal(direction, new Quote("CDR", price, previous, DateTimeOffset.UnixEpoch).Direction);
+
+    [Fact]
+    public void First_trade_has_no_direction() =>
+        Assert.Equal(0, new Quote("CDR", 100m, null, DateTimeOffset.UnixEpoch).Direction);
+}

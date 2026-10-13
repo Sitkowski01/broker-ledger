@@ -68,6 +68,28 @@ public sealed class PortfolioQueriesTests(PostgresFixture postgres) : IAsyncLife
     }
 
     [Fact]
+    public async Task Quotes_show_each_company_with_the_direction_of_its_last_trade()
+    {
+        var inbox = _db.Inbox();
+        await inbox.AddAsync(Trade("CDR", 1, 250m));
+        await inbox.AddAsync(Trade("PKO", 1, 48m));
+        await inbox.AddAsync(Trade("CDR", 2, 251.50m));
+        await inbox.AddAsync(new ExchangeEvent.Cancelled("CDR", new EventPosition(1, 3), 9, 1, "REQUESTED"));
+        await inbox.AddAsync(Trade("ALE", 1, 30m));
+        await inbox.AddAsync(Trade("ALE", 2, 29.90m));
+        // Nowy przebieg gieldy: liczy sie kolejnosc przyjscia.
+        await inbox.AddAsync(Trade("CDR", 1, 249.10m, run: 2));
+
+        var quotes = await _db.Prices().QuotesAsync(limit: 10);
+
+        Assert.Equal(
+            [("ALE", 29.90m, (decimal?)30m, -1), ("CDR", 249.10m, 251.50m, -1), ("PKO", 48m, null, 0)],
+            quotes.Select(q => (q.Symbol, q.Price, q.PreviousPrice, q.Direction)));
+        Assert.Equal(["ALE"], (await _db.Prices().QuotesAsync(limit: 1)).Select(q => q.Symbol));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => _db.Prices().QuotesAsync(0));
+    }
+
+    [Fact]
     public async Task No_symbols_need_no_query()
     {
         Assert.Empty(await _db.Prices().LastPricesAsync([]));
