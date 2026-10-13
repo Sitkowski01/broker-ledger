@@ -1,0 +1,13 @@
+<span class="sr-only">Notowania: {{ summary() }}</span>
+<div class="wrap" aria-hidden="true">
+  <div class="tape">
+    @for (item of tape(); track $index) {
+      <span class="item">
+        <span class="label">{{ item.label }}</span>
+        <span class="value">{{ item.value }}</span>
+        <span [class]="markClass(item.mark)">{{ item.mark }}</span>
+      </span>
+    }
+  </div>
+</div>
+<div class="status"><span class="live blink"></span>Live</div>
