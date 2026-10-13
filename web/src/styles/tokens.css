@@ -1,0 +1,43 @@
+/* Kolory i fonty w jednym miejscu — ten sam slownik co portfolio i terminal Parkietu. */
+:root {
+  --bg: #030712;
+  --panel: rgba(15, 23, 42, 0.7);
+  --line: #1e293b;
+  --line-strong: #334155;
+  --line-hover: #475569;
+  --text: #f8fafc;
+  --text-2: #94a3b8;
+  /* Najjasniejszy szary, ktory na panelu trzyma kontrast 4.5:1 dla malego tekstu. */
+  --muted: #8b98ad;
+
+  --bull: #10b981;
+  --bull-soft: rgba(16, 185, 129, 0.12);
+  --bull-line: rgba(16, 185, 129, 0.3);
+  --bull-light: #6ee7b7;
+  --bear: #ef4444;
+  --bear-text: #f87171;
+  --bear-soft: rgba(239, 68, 68, 0.12);
+  --warn: #f5b74a;
+  --warn-text: #fcd34d;
+  --warn-soft: rgba(245, 183, 74, 0.12);
+  --info-text: #7dd3fc;
+  --info-soft: rgba(56, 189, 248, 0.12);
+
+  --sans: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'JetBrains Mono Variable', ui-monospace, Consolas, monospace;
+  --display: 'Space Grotesk Variable', var(--sans);
+
+  --radius: 12px;
+  --radius-sm: 10px;
+  --neon: 0 0 15px rgba(16, 185, 129, 0.2);
+  --neon-strong: 0 0 25px rgba(16, 185, 129, 0.4);
+  --gutter: 24px;
+
+  color-scheme: dark;
+}
+
+@media (max-width: 760px) {
+  :root {
+    --gutter: 16px;
+  }
+}
