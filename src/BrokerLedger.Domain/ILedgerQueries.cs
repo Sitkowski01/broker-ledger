@@ -3,10 +3,12 @@ namespace BrokerLedger.Domain;
 public sealed record AccountBalance(AccountId Account, decimal Balance);
 
 /// <summary>
-/// Dokument z punktu widzenia klienta: tylko zapisy na jego kontach. <see cref="Sequence"/> to kolejnosc
+/// Dokument z punktu widzenia klienta: zapisy na jego kontach i na kontach brokera (bank, depozyt, prowizje) —
+/// bez kont innych klientow. <see cref="Order"/> to zlecenie, ktorego dotyczy dokument. <see cref="Sequence"/> to kolejnosc
 /// zaksiegowania — po niej sortujemy i stronicujemy, bo czas i UUID v7 w tej samej milisekundzie jej nie ustalaja.
 /// </summary>
-public sealed record HistoryEntry(Guid Id, long Sequence, string Description, DateTimeOffset CreatedAt, IReadOnlyList<Posting> Postings);
+public sealed record HistoryEntry(
+    Guid Id, long Sequence, string Description, DateTimeOffset CreatedAt, IReadOnlyList<Posting> Postings, OrderId? Order = null);
 
 /// <summary>Odczyty dla klienta. Osobno od <see cref="ILedgerStore"/>: zapis i odczyt maja rozne potrzeby.</summary>
 public interface ILedgerQueries

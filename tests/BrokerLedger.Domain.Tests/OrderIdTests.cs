@@ -29,3 +29,28 @@ public class OrderIdTests
         Assert.Null(new OrderId(Guid.Parse("3f2504e0-4f89-41d3-9a0c-0305e82c3301")).CreatedAt);
     }
 }
+
+public class LedgerKeyTests
+{
+    [Fact]
+    public void Every_ledger_key_of_an_order_points_back_to_it()
+    {
+        var order = Order.Place(OrderId.New(), ClientId.New(), "k", new OrderRequest("CDR", OrderSide.Buy, OrderType.Limit, 10m, 1), Commission.Standard);
+
+        Assert.All(
+            [order.BlockKey, order.ReleaseKey, order.TradeKey(new EventPosition(1, 7))],
+            key => Assert.Equal(order.Id, Order.OfLedgerKey(key)));
+    }
+
+    [Theory]
+    [InlineData("3f2504e0-4f89-41d3-9a0c-0305e82c3301:dep-1")]
+    [InlineData("order:not-a-guid:block")]
+    [InlineData("order:00000000-0000-0000-0000-000000000000:block")]
+    [InlineData("order:3f2504e0-4f89-41d3-9a0c-0305e82c3301")]
+    [InlineData("deposit:3f2504e0-4f89-41d3-9a0c-0305e82c3301:x")]
+    public void Deposits_and_odd_keys_have_no_order(string key)
+    {
+        Assert.Null(Order.OfLedgerKey(key));
+        Assert.Throws<ArgumentNullException>(() => Order.OfLedgerKey(null!));
+    }
+}

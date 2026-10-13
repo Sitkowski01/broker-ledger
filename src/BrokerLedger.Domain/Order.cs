@@ -63,6 +63,19 @@ public sealed partial class Order
     public string BlockKey => $"order:{Id}:block";
     public string ReleaseKey => $"order:{Id}:release";
 
+    /// <summary>
+    /// Zlecenie, ktorego dotyczy dokument ksiegi, odczytane z klucza dokumentu ("order:{id}:..."). Klucze buduje
+    /// tylko ta klasa, wiec i odczyt jest tutaj. Dokumenty bez zlecenia (wplaty, wyplaty) daja null.
+    /// </summary>
+    public static OrderId? OfLedgerKey(string idempotencyKey)
+    {
+        ArgumentNullException.ThrowIfNull(idempotencyKey);
+        var parts = idempotencyKey.Split(':');
+        return parts.Length >= 3 && parts[0] == "order" && Guid.TryParse(parts[1], out var id) && id != Guid.Empty
+            ? new OrderId(id)
+            : null;
+    }
+
     /// <summary>Czy reconciler ma tu cos dokonczyc: zablokowac, wyslac, wyjasnic albo zwolnic blokade.</summary>
     public bool NeedsAttention => Status is OrderStatus.Pending or OrderStatus.Unknown || AwaitsRelease;
 
