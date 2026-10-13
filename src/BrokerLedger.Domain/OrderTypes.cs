@@ -60,6 +60,29 @@ public sealed record OrderId(Guid Value)
     /// <summary>Identyfikator dla gieldy (clientOrderId): 32 znaki szesnastkowe.</summary>
     public string ForExchange => Value.ToString("N");
 
+    /// <summary>
+    /// Chwila zlozenia zlecenia. UUID v7 zaczyna sie od 48 bitow czasu uniksowego w milisekundach,
+    /// a identyfikator powstaje przy skladaniu — wiec czas jest w nim zapisany i nie trzeba osobnej kolumny.
+    /// Dla starszych identyfikatorow (nie v7) czasu nie znamy.
+    /// </summary>
+    public DateTimeOffset? CreatedAt
+    {
+        get
+        {
+            if (Value.Version != 7)
+            {
+                return null;
+            }
+            var bytes = Value.ToByteArray(bigEndian: true);
+            var milliseconds = 0L;
+            for (var i = 0; i < 6; i++)
+            {
+                milliseconds = (milliseconds << 8) | bytes[i];
+            }
+            return DateTimeOffset.FromUnixTimeMilliseconds(milliseconds);
+        }
+    }
+
     public override string ToString() => Value.ToString();
 }
 

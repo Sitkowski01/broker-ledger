@@ -23,12 +23,15 @@ public sealed partial class OrderEndToEndTests(BrokerApi api)
     public async Task Accepted_buy_blocks_money_and_goes_to_the_exchange()
     {
         using var http = await FundedClientAsync();
+        var before = DateTimeOffset.UtcNow.AddSeconds(-1);
 
         var response = await PlaceAsync(http, "o-1", Buy());
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var order = await response.JsonAsync();
         Assert.Equal(("accepted", "PLN", Blocked), (Text(order, "status"), Text(order, "blockedAsset"), Text(order, "blocked")));
+        // Czas zlozenia do kolumny "Zlozone" na liscie zlecen we froncie.
+        Assert.InRange(order.GetProperty("createdAt").GetDateTimeOffset(), before, DateTimeOffset.UtcNow.AddSeconds(1));
         var sent = Assert.Single(api.Parkiet.Placed, p => Cid(p) == Guid.Parse(Text(order, "id")!).ToString("N"));
         Assert.Equal(("BUY", "LIMIT", "250.00", 10L), (Text(sent, "side"), Text(sent, "type"), Text(sent, "price"), sent.GetProperty("quantity").GetInt64()));
         Assert.Equal(("7490.25", Blocked), await BalanceAsync(http));
