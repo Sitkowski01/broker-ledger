@@ -6,3 +6,6 @@ import { Session } from './session';
 export const authGuard: CanActivateFn = (_route, state) =>
   inject(Session).isActive() ||
   inject(Router).createUrlTree(['/zaloguj'], { queryParams: state.url === '/' ? {} : { powrot: state.url } });
+
+/** Zalogowany klient nie musi ogladac formularza logowania. */
+export const guestGuard: CanActivateFn = () => !inject(Session).isActive() || inject(Router).createUrlTree(['/']);
