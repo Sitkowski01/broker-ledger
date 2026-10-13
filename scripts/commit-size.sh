@@ -2,7 +2,7 @@
 # Liczy linie w staged diffie (dodane + usuniete), pomijajac pliki generowane.
 # Uzycie: commit-size.sh [limit]   — kod wyjscia 1, gdy limit przekroczony.
 LIMIT="${1:-${MAX_COMMIT_LINES:-200}}"
-IGNORE='(^|/)(packages\.lock\.json|\.gitignore|Migrations/.*\.Designer\.cs|Migrations/.*ModelSnapshot\.cs)$'   # pliki generowane (dotnet new gitignore, dotnet ef)
+IGNORE='(^|/)(packages\.lock\.json|package-lock\.json|\.gitignore|Migrations/.*\.Designer\.cs|Migrations/.*ModelSnapshot\.cs)$'   # pliki generowane (dotnet new gitignore, dotnet ef, npm)
 
 total=0
 while IFS=$'\t' read -r added deleted path; do
