@@ -30,7 +30,7 @@ internal sealed class PostgresLedgerQueries(IDbContextFactory<LedgerDbContext> c
         {
             entries = entries.Where(e => e.Sequence < cursor);
         }
-        return await ToHistoryAsync(client, entries.OrderByDescending(e => e.Sequence).Take(limit), cancellationToken);
+        return await ToHistoryAsync(client, entries.OrderByDescending(e => e.Sequence).Take(limit), withBroker: true, cancellationToken);
     }
 
     public async Task<IReadOnlyList<HistoryEntry>> ClientShareEntriesAsync(ClientId client, CancellationToken cancellationToken = default)
@@ -40,12 +40,15 @@ internal sealed class PostgresLedgerQueries(IDbContextFactory<LedgerDbContext> c
         var entries = db.JournalEntries.AsNoTracking()
             .Where(e => e.Postings.Any(p => p.Account.ClientId == client.Value && p.Account.AssetKind == AssetKind.Shares))
             .OrderBy(e => e.Sequence);
-        return await ToHistoryAsync(client, entries, cancellationToken);
+        return await ToHistoryAsync(client, entries, withBroker: false, cancellationToken);
     }
 
-    /// <summary>Dokumenty z samymi zapisami klienta — cudze konta (bank, depozyt, prowizja) zostaja w bazie.</summary>
+    /// <summary>
+    /// Dokumenty z zapisami klienta i — gdy <paramref name="withBroker"/> — kontami brokera (bank, depozyt, prowizja),
+    /// zeby klient widzial druga strone operacji. Konta innych klientow nigdy nie wychodza z bazy.
+    /// </summary>
     private static async Task<IReadOnlyList<HistoryEntry>> ToHistoryAsync(
-        ClientId client, IQueryable<JournalEntryRow> entries, CancellationToken cancellationToken)
+        ClientId client, IQueryable<JournalEntryRow> entries, bool withBroker, CancellationToken cancellationToken)
     {
         var rows = await entries
             .Select(e => new
@@ -54,8 +57,9 @@ internal sealed class PostgresLedgerQueries(IDbContextFactory<LedgerDbContext> c
                 e.Sequence,
                 e.Description,
                 e.CreatedAt,
+                e.IdempotencyKey,
                 Postings = e.Postings
-                    .Where(p => p.Account.ClientId == client.Value)
+                    .Where(p => p.Account.ClientId == client.Value || (withBroker && p.Account.ClientId == null))
                     .OrderBy(p => p.Id)
                     .Select(p => new { p.Account, p.Side, p.Amount })
                     .ToList(),
@@ -63,6 +67,7 @@ internal sealed class PostgresLedgerQueries(IDbContextFactory<LedgerDbContext> c
             .ToListAsync(cancellationToken);
 
         return rows.Select(e => new HistoryEntry(e.Id, e.Sequence, e.Description, e.CreatedAt,
-            e.Postings.Select(p => new Posting(AccountKey.ToAccountId(p.Account), p.Side, p.Amount)).ToList())).ToList();
+            e.Postings.Select(p => new Posting(AccountKey.ToAccountId(p.Account), p.Side, p.Amount)).ToList(),
+            Order.OfLedgerKey(e.IdempotencyKey))).ToList();
     }
 }

@@ -56,22 +56,48 @@ public sealed class ClientsAndQueriesTests(PostgresFixture postgres) : IAsyncLif
     }
 
     [Fact]
-    public async Task History_shows_only_the_clients_postings_newest_first()
+    public async Task History_shows_the_clients_and_brokers_postings_newest_first()
     {
         var store = _db.Store();
         var at = new DateTimeOffset(2026, 10, 11, 12, 0, 0, TimeSpan.Zero);
+        var order = OrderId.New();
         await _db.Store(new FixedClock(at)).PostAsync("a", JournalEntries.Deposit(_client, Money.Pln(100m)));
         await store.PostAsync("b", JournalEntries.Deposit(ClientId.New(), Money.Pln(5m)));
-        await store.PostAsync("c", JournalEntries.Block(_client, Pln, 40m));
+        await store.PostAsync($"order:{order}:block", JournalEntries.Block(_client, Pln, 40m));
 
         var history = await _db.Queries().ClientHistoryAsync(_client, limit: 10);
 
         Assert.Equal(["block", "deposit"], history.Select(h => h.Description));
-        // Wplata ma dwa zapisy (bank i klient) — klient widzi tylko swoj.
-        var deposit = Assert.Single(history[1].Postings);
-        Assert.Equal(Posting.Credit(AccountId.Available(_client, Pln), 100m), deposit);
-        Assert.Equal(at, history[1].CreatedAt);
-        Assert.Equal(2, history[0].Postings.Count);
+        // Wplata ma dwa zapisy: bank brokera (Wn) i konto klienta (Ma) — klient widzi obie strony.
+        Assert.Equal(
+            [Posting.Debit(AccountId.Bank(Currency.Pln), 100m), Posting.Credit(AccountId.Available(_client, Pln), 100m)],
+            history[1].Postings);
+        Assert.Equal((at, null), (history[1].CreatedAt, history[1].Order));
+        Assert.Equal((2, order), (history[0].Postings.Count, history[0].Order));
+    }
+
+    [Fact]
+    public async Task History_never_shows_another_clients_account()
+    {
+        var other = ClientId.New();
+        var store = _db.Store();
+        await store.PostAsync("dep", JournalEntries.Deposit(_client, Money.Pln(100m)));
+        await store.PostAsync("gift", new JournalEntry("transfer",
+            Posting.Debit(AccountId.Available(_client, Pln), 30m), Posting.Credit(AccountId.Available(other, Pln), 30m)));
+
+        var transfer = (await _db.Queries().ClientHistoryAsync(_client, limit: 10))[0];
+
+        Assert.Equal([Posting.Debit(AccountId.Available(_client, Pln), 30m)], transfer.Postings);
+    }
+
+    [Fact]
+    public async Task Portfolio_entries_keep_only_the_clients_postings()
+    {
+        await _db.Store().PostAsync("in", JournalEntries.SharesTransferIn(_client, "CDR", 5));
+
+        var entry = Assert.Single(await _db.Queries().ClientShareEntriesAsync(_client));
+
+        Assert.Equal([Posting.Credit(AccountId.Available(_client, Asset.Shares("CDR")), 5m)], entry.Postings);
     }
 
     [Fact]
