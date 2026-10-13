@@ -94,16 +94,37 @@ internal static class AccountEndpoints
             sequence = e.Sequence,
             description = e.Description,
             createdAt = e.CreatedAt,
-            changes = e.Postings.Select(p => new
+            orderId = e.Order?.Value,
+            // Zmiany sald klienta: "+" gdy saldo rosnie, "-" gdy maleje.
+            changes = e.Postings.Where(p => p.Account.Client is not null).Select(p => new
             {
                 account = p.Account.Type == AccountType.ClientBlocked ? "blocked" : "available",
                 asset = p.Account.Asset.Code,
                 change = (p.Side == p.Account.NormalSide ? "+" : "-") + Amounts.Format(p.Amount, p.Account.Asset),
             }),
+            // Caly dokument po ksiegowemu: strona Wn/Ma i czyje konto (klienta albo brokera).
+            postings = e.Postings.Select(p => new
+            {
+                owner = p.Account.Client is null ? "broker" : "client",
+                account = AccountName(p.Account.Type),
+                asset = p.Account.Asset.Code,
+                side = p.Side == PostingSide.Debit ? "debit" : "credit",
+                amount = Amounts.Format(p.Amount, p.Account.Asset),
+            }),
         }).ToList();
         // Pelna strona = moze byc dalej; kursor to numer kolejny ostatniego dokumentu.
         return Results.Ok(new { items, nextBefore = items.Count == size ? items[^1].sequence : (long?)null });
     }
+
+    private static string AccountName(AccountType type) => type switch
+    {
+        AccountType.ClientAvailable => "available",
+        AccountType.ClientBlocked => "blocked",
+        AccountType.Bank => "bank",
+        AccountType.Depository => "depository",
+        AccountType.FeeIncome => "feeIncome",
+        _ => throw new ArgumentOutOfRangeException(nameof(type), type, null),
+    };
 
     private static decimal BalanceOf(IEnumerable<AccountBalance> accounts, AccountType type) =>
         accounts.Where(a => a.Account.Type == type).Sum(a => a.Balance);

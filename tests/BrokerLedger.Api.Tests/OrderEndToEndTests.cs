@@ -35,6 +35,9 @@ public sealed partial class OrderEndToEndTests(BrokerApi api)
         var sent = Assert.Single(api.Parkiet.Placed, p => Cid(p) == Guid.Parse(Text(order, "id")!).ToString("N"));
         Assert.Equal(("BUY", "LIMIT", "250.00", 10L), (Text(sent, "side"), Text(sent, "type"), Text(sent, "price"), sent.GetProperty("quantity").GetInt64()));
         Assert.Equal(("7490.25", Blocked), await BalanceAsync(http));
+        // Dokument blokady w historii prowadzi do zlecenia, ktore go wywolalo.
+        var block = (await http.GetFromJsonAsync<JsonElement>("/api/me/history")).GetProperty("items")[0];
+        Assert.Equal(("block", Text(order, "id")), (Text(block, "description"), Text(block, "orderId")));
     }
 
     [Fact]

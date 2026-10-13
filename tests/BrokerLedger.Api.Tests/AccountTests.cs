@@ -26,6 +26,14 @@ public sealed class AccountTests(BrokerApi api)
         Assert.Equal(("available", "PLN", "-50.40"), (
             change.GetProperty("account").GetString(), change.GetProperty("asset").GetString(), change.GetProperty("change").GetString()));
         Assert.Equal("+250.40", history[1].GetProperty("changes")[0].GetProperty("change").GetString());
+
+        // Pelny dokument wplaty: bank brokera na Wn, konto klienta na Ma; wplata nie dotyczy zadnego zlecenia.
+        Assert.Equal(
+            [("broker", "bank", "PLN", "debit", "250.40"), ("client", "available", "PLN", "credit", "250.40")],
+            history[1].GetProperty("postings").EnumerateArray().Select(p => (
+                p.GetProperty("owner").GetString(), p.GetProperty("account").GetString(), p.GetProperty("asset").GetString(),
+                p.GetProperty("side").GetString(), p.GetProperty("amount").GetString())));
+        Assert.Equal(JsonValueKind.Null, history[1].GetProperty("orderId").ValueKind);
     }
 
     [Fact]
