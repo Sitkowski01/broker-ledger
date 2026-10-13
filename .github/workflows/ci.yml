@@ -25,6 +25,26 @@ jobs:
           name: stryker-domain
           path: StrykerOutput/**/reports
 
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: Architektura frontu (dependency-cruiser)
+        run: npm run arch
+      - name: Build produkcyjny
+        run: npx ng build
+      - name: Testy jednostkowe (Vitest)
+        run: npx ng test --watch=false
+
   mutation-infrastructure:
     # Osobno, bo kazdy przebieg testow stawia kontener PostgreSQL — trwa kilka minut.
     runs-on: ubuntu-latest
