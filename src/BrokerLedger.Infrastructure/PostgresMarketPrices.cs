@@ -14,6 +14,7 @@ internal sealed class PostgresMarketPrices(IDbContextFactory<LedgerDbContext> co
         IReadOnlyCollection<string> symbols, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(symbols);
+        // Stryker disable once Block : oszczedza tylko zapytanie — pusta tablica w ANY i tak nic nie zwraca
         if (symbols.Count == 0)
         {
             return new Dictionary<string, MarketPrice>();

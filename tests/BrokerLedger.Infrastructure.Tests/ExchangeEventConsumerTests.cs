@@ -148,12 +148,28 @@ public sealed class ExchangeEventConsumerTests(PostgresFixture postgres, KafkaFi
                 new FlakyInbox(_inbox, failures: 1), _db.DeadLetters(), NullLogger<ExchangeEventConsumer>.Instance).StoreWithRetryAsync(Trade(2), stopping.Token));
     }
 
-    private sealed class FlakyInbox(IExchangeInbox inner, int failures) : IExchangeInbox
+    [Fact]
+    public async Task Cancellation_not_requested_by_the_consumer_is_retried_like_an_outage()
+    {
+        // Np. limit czasu polecenia w sterowniku bazy — to nie zatrzymanie uslugi, wiec zdarzenie nie moze przepasc.
+        var flaky = new FlakyInbox(_inbox, failures: 1, () => new OperationCanceledException("command timed out"));
+        var consumer = new ExchangeEventConsumer(
+            new ExchangeEventsSettings(kafka.BootstrapServers, _topic, "g", TimeSpan.FromMilliseconds(10)),
+            flaky, _db.DeadLetters(), NullLogger<ExchangeEventConsumer>.Instance);
+
+        var intake = await consumer.StoreWithRetryAsync(Trade(1), CancellationToken.None);
+
+        Assert.Equal((ExchangeEventConsumer.Intake.Stored, 2), (intake, flaky.Attempts));
+    }
+
+    private sealed class FlakyInbox(IExchangeInbox inner, int failures, Func<Exception>? error = null) : IExchangeInbox
     {
         public int Attempts { get; private set; }
 
         public Task<bool> AddAsync(ExchangeEvent exchangeEvent, CancellationToken cancellationToken = default) =>
-            ++Attempts <= failures ? throw new TimeoutException("database did not answer") : inner.AddAsync(exchangeEvent, cancellationToken);
+            ++Attempts <= failures
+                ? throw (error?.Invoke() ?? new TimeoutException("database did not answer"))
+                : inner.AddAsync(exchangeEvent, cancellationToken);
 
         public Task<IReadOnlyList<ExchangeEvent>> PendingAsync(int limit, CancellationToken cancellationToken = default) =>
             inner.PendingAsync(limit, cancellationToken);

@@ -59,6 +59,7 @@ internal sealed partial class CachedExchangeRates(
 
     public async Task<RatesSnapshot?> CurrentAsync(CancellationToken cancellationToken = default)
     {
+        // Stryker disable once Block : szybka sciezka bez blokady; to samo sprawdzenie powtarza sie pod blokada
         if (TryCached(_state, out var cached))
         {
             return cached;
@@ -82,6 +83,7 @@ internal sealed partial class CachedExchangeRates(
             {
                 var nextAttempt = clock.GetUtcNow() + retryAfter;
                 _state = state with { NextAttempt = nextAttempt };
+                // Stryker disable once Statement : samo logowanie, bez wplywu na dzialanie
                 LogUnavailable(logger, nextAttempt, e);
                 return Snapshot(state, stale: true);
             }

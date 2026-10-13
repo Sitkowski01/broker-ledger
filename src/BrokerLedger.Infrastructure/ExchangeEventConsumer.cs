@@ -96,6 +96,7 @@ internal sealed partial class ExchangeEventConsumer(
             {
                 return await StoreAsync(message, stoppingToken);
             }
+            // Stryker disable Block : w bloku jest tylko logowanie i przerwa, ponowienie i tak nastapi
             catch (Exception e) when (e is not OperationCanceledException || !stoppingToken.IsCancellationRequested)
             {
                 // Stryker disable once Statement : samo logowanie, bez wplywu na dzialanie
@@ -103,6 +104,7 @@ internal sealed partial class ExchangeEventConsumer(
                 // Stryker disable once Statement : przerwa zmienia tylko tempo ponowien, nie ich wynik
                 await Task.Delay(settings.RetryDelay, stoppingToken);
             }
+            // Stryker restore Block
         }
     }
 

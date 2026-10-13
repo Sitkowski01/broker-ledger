@@ -41,6 +41,19 @@ public sealed class NbpResilienceTests
     }
 
     [Fact]
+    public async Task Long_attempt_timeout_widens_the_circuit_breaker_window()
+    {
+        // Okno bezpiecznika ma 30 s, ale przy probie 20 s musi urosnac do 40 s — inaczej biblioteka odrzuca konfiguracje.
+        var nbp = new FakeNbp();
+        await using var services = Services(nbp, attemptTimeout: TimeSpan.FromSeconds(20));
+
+        var snapshot = await services.GetRequiredService<IExchangeRates>().CurrentAsync();
+
+        Assert.NotNull(snapshot);
+        Assert.Equal(1, nbp.Calls);
+    }
+
+    [Fact]
     public async Task Api_that_stays_down_gives_up_after_three_attempts()
     {
         var nbp = new FakeNbp().Then(FakeNbp.Status(HttpStatusCode.ServiceUnavailable));
