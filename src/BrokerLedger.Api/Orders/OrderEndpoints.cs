@@ -34,7 +34,7 @@ internal static class OrderEndpoints
             errors[AccountEndpoints.IdempotencyHeader] = [AccountEndpoints.KeyError];
         }
         var request = TryRequest(body, errors);
-        if (request is null || errors.Count > 0)
+        if (request is null)
         {
             return Results.ValidationProblem(errors);
         }
@@ -123,6 +123,7 @@ internal static class OrderEndpoints
 
     private static IResult NotFound() => Results.Problem(statusCode: StatusCodes.Status404NotFound, title: "Order not found");
 
+    /// <summary>Zlecenie z tresci albo null, gdy w <paramref name="errors"/> jest jakikolwiek blad — takze dodany wczesniej.</summary>
     private static OrderRequest? TryRequest(PlaceOrderRequest body, Dictionary<string, string[]> errors)
     {
         if (body.Symbol is not { Length: > 0 })

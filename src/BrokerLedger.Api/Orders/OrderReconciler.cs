@@ -35,11 +35,13 @@ internal sealed partial class OrderReconciler(
         {
             await RunOnceAsync(stoppingToken);
         }
+        // Stryker disable Block : w bloku jest tylko logowanie
         catch (Exception e) when (e is not OperationCanceledException || !stoppingToken.IsCancellationRequested)
         {
             // Stryker disable once Statement : samo logowanie, bez wplywu na dzialanie
             LogPassFailure(logger, e);
         }
+        // Stryker restore Block
     }
 
     /// <summary>Jeden przebieg: ile zlecen doprowadzono do konca albo dalej.</summary>
@@ -63,12 +65,14 @@ internal sealed partial class OrderReconciler(
             {
                 // Ktos inny (zadanie klienta) wlasnie je zmienil — wroci w nastepnym przebiegu, jesli trzeba.
             }
+            // Stryker disable Block : w bloku jest tylko logowanie
             catch (Exception e) when (e is not OperationCanceledException)
             {
                 // Jedno zlecenie (np. baza na chwile niedostepna) nie zatrzymuje pozostalych.
                 // Stryker disable once Statement : samo logowanie, bez wplywu na dzialanie
                 LogFailure(logger, order.Id.Value, e);
             }
+            // Stryker restore Block
         }
         return progressed;
     }

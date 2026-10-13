@@ -40,6 +40,8 @@ public sealed partial class OrderEndToEndTests
 
         var response = await PlaceAsync(http, null, Buy());
 
+        // Poprawne zlecenie bez klucza odpada juz na walidacji, z nazwa naglowka — nie dopiero w domenie.
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.True((await response.JsonAsync()).GetProperty("errors").TryGetProperty("Idempotency-Key", out _));
     }
 }
