@@ -3,6 +3,7 @@ using BrokerLedger.Api;
 using BrokerLedger.Api.Accounts;
 using BrokerLedger.Api.Auth;
 using BrokerLedger.Api.Errors;
+using BrokerLedger.Api.Market;
 using BrokerLedger.Api.Orders;
 using BrokerLedger.Api.Portfolios;
 using BrokerLedger.Infrastructure;
@@ -58,5 +59,6 @@ app.MapAuthEndpoints();
 app.MapAccountEndpoints();
 app.MapOrderEndpoints();
 app.MapPortfolioEndpoints();
+app.MapMarketEndpoints();
 
 await app.RunAsync();
