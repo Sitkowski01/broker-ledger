@@ -1,0 +1,32 @@
+<a class="skip" href="#tresc">Przejdź do treści</a>
+<div class="grid-bg" aria-hidden="true"></div>
+<div class="glow" aria-hidden="true"></div>
+
+<bl-ticker [items]="quotes()" />
+
+<header>
+  <div class="inner">
+    <a routerLink="/" class="brand" aria-label="Broker Ledger — pulpit"><bl-logo /></a>
+    <nav aria-label="Główna">
+      @for (link of links; track link.path) {
+        <a
+          [routerLink]="link.path"
+          routerLinkActive="on"
+          [routerLinkActiveOptions]="{ exact: link.exact }"
+          ariaCurrentWhenActive="page"
+          >{{ link.label }}</a
+        >
+      }
+    </nav>
+  </div>
+</header>
+
+<main id="tresc">
+  <router-outlet />
+</main>
+
+<footer>
+  <div class="inner">
+    <span class="credit">Projekt demonstracyjny</span>
+  </div>
+</footer>
