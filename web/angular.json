@@ -19,7 +19,7 @@
             "browser": "src/main.ts",
             "tsConfig": "tsconfig.app.json",
             "assets": [{ "glob": "**/*", "input": "public" }],
-            "styles": ["src/styles/tokens.css", "src/styles/base.css", "src/styles/components.css"]
+            "styles": ["src/styles/tokens.css", "src/styles/base.css", "src/styles/components.css", "src/styles/forms.css"]
           },
           "configurations": {
             "production": {
