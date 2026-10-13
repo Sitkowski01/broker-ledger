@@ -1,0 +1,12 @@
+# Wymyslone hasla z testow ekranu logowania (web/src/app/features/auth/login-page.spec.ts).
+# Test wpisuje je w pole formularza, a API zastepuje atrapa - nie chronia zadnego konta.
+# Wyjatki sa po wartosci, nie po sciezce: prawdziwy sekret w pliku testu dalej zostanie wykryty.
+version: 2
+secret:
+  ignored-matches:
+    - name: haslo testowe - poprawne logowanie
+      match: tajne-haslo
+    - name: haslo testowe - bledne logowanie
+      match: zle-haslo
+    - name: haslo testowe - rejestracja
+      match: dlugie-haslo
