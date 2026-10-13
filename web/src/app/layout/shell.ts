@@ -1,8 +1,9 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { Session } from '../core/auth/session';
+import { QuoteFeed } from '../core/market/quote-feed';
 import { Logo } from '../shared/logo';
-import { Ticker, TickerItem } from './ticker';
+import { Ticker } from './ticker';
 
 /** Rama zalogowanej czesci: notowania, naglowek z nawigacja, tresc ekranu i stopka. */
 @Component({
@@ -13,8 +14,7 @@ import { Ticker, TickerItem } from './ticker';
   styleUrl: './shell.css',
 })
 export class Shell {
-  // Notowania podlaczy serwis rynku (krok 8c); do tego czasu pasek jest ukryty.
-  protected readonly quotes = signal<readonly TickerItem[]>([]);
+  protected readonly quotes = inject(QuoteFeed).items;
 
   private readonly session = inject(Session);
   private readonly router = inject(Router);
