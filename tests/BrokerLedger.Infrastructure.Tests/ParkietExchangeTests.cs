@@ -14,11 +14,11 @@ public class ParkietExchangeTests
     [Fact]
     public async Task Sends_the_order_in_parkiets_format()
     {
-        var stub = new Stub(HttpStatusCode.Created, """{"orderId":42,"events":[]}""");
+        var stub = new Stub(HttpStatusCode.Created, """{"orderId":42,"runId":5,"events":[]}""");
 
         var reply = await Exchange(stub).PlaceAsync(Buy);
 
-        Assert.Equal(new ExchangeReply.Accepted(42), reply);
+        Assert.Equal(new ExchangeReply.Accepted(42, 5), reply);
         Assert.Equal((HttpMethod.Post, "/api/instruments/CDR/orders"), (stub.Method, stub.Path));
         var body = JsonDocument.Parse(stub.Body!).RootElement;
         Assert.Equal(("BUY", "LIMIT", "250.40", 10L, Buy.Id.ForExchange),
@@ -30,9 +30,9 @@ public class ParkietExchangeTests
     public async Task Market_sell_goes_without_a_price()
     {
         var sell = Order.Place(OrderId.New(), ClientId.New(), "k", new OrderRequest("PKO", OrderSide.Sell, OrderType.Market, null, 3), Commission.Standard);
-        var stub = new Stub(HttpStatusCode.OK, """{"orderId":7,"repeated":true,"events":[]}""");
+        var stub = new Stub(HttpStatusCode.OK, """{"orderId":7,"runId":5,"repeated":true,"events":[]}""");
 
-        Assert.Equal(new ExchangeReply.Accepted(7), await Exchange(stub).PlaceAsync(sell));
+        Assert.Equal(new ExchangeReply.Accepted(7, 5), await Exchange(stub).PlaceAsync(sell));
 
         var body = JsonDocument.Parse(stub.Body!).RootElement;
         Assert.Equal(("SELL", "MARKET"), (body.GetProperty("side").GetString(), body.GetProperty("type").GetString()));
@@ -75,6 +75,17 @@ public class ParkietExchangeTests
     }
 
     [Fact]
+    public async Task Order_without_a_run_is_cancelled_by_number_alone()
+    {
+        var stub = new Stub(HttpStatusCode.OK, "{}");
+        var legacy = Order.Restore(OrderId.New(), ClientId.New(), "k", Buy.Request, Buy.BlockedAmount, OrderStatus.Accepted, 17, null,
+            null, true, false, 1, 0, OrderExecution.None);
+
+        Assert.Equal(CancelReply.Cancelled, await Exchange(stub).CancelAsync(legacy));
+        Assert.Equal("/api/instruments/CDR/orders/17", stub.PathAndQuery);
+    }
+
+    [Fact]
     public async Task Timeout_and_network_errors_are_no_answer()
     {
         Assert.IsType<ExchangeReply.NoAnswer>(await Exchange(new Stub(new TaskCanceledException("timeout"))).PlaceAsync(Buy));
@@ -104,7 +115,7 @@ public class ParkietExchangeTests
 
         Assert.Equal(expected, await Exchange(stub).CancelAsync(Accepted(17)));
 
-        Assert.Equal((HttpMethod.Delete, "/api/instruments/CDR/orders/17"), (stub.Method, stub.Path));
+        Assert.Equal((HttpMethod.Delete, "/api/instruments/CDR/orders/17?runId=5"), (stub.Method, stub.PathAndQuery));
     }
 
     [Fact]
@@ -125,7 +136,7 @@ public class ParkietExchangeTests
     {
         var order = Order.Place(OrderId.New(), ClientId.New(), "k", Buy.Request, Commission.Standard);
         order.MarkFundsBlocked();
-        order.Accept(exchangeOrderId);
+        order.Accept(exchangeOrderId, 5);
         return order;
     }
 
@@ -141,6 +152,7 @@ public class ParkietExchangeTests
 
         public HttpMethod? Method { get; private set; }
         public string? Path { get; private set; }
+        public string? PathAndQuery { get; private set; }
         public string? Body { get; private set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -151,6 +163,7 @@ public class ParkietExchangeTests
             }
             Method = request.Method;
             Path = request.RequestUri!.AbsolutePath;
+            PathAndQuery = request.RequestUri.PathAndQuery;
             Body = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
             return new HttpResponseMessage(_status) { Content = new StringContent(_body, Encoding.UTF8, "application/json") };
         }
@@ -158,14 +171,20 @@ public class ParkietExchangeTests
 
     [Theory]
     [InlineData("""{"events":[]}""")]
-    [InlineData("""{"orderId":"42"}""")]
-    [InlineData("""{"orderId":0}""")]
-    [InlineData("""{"orderId":-3}""")]
+    [InlineData("""{"orderId":"42","runId":5}""")]
+    [InlineData("""{"orderId":0,"runId":5}""")]
+    [InlineData("""{"orderId":-3,"runId":5}""")]
+    [InlineData("""{"runId":5}""")]
     [InlineData("""[42]""")]
-    public async Task Success_without_an_order_number_is_not_an_acceptance(string body)
+    // Numer bez przebiegu nic nie mowi: po starcie gieldy od zera ten sam numer ma cudze zlecenie.
+    [InlineData("""{"orderId":42,"events":[]}""")]
+    [InlineData("""{"orderId":42,"runId":"5"}""")]
+    [InlineData("""{"orderId":42,"runId":0}""")]
+    [InlineData("""{"orderId":42,"runId":-1}""")]
+    public async Task Success_without_an_order_number_and_run_is_not_an_acceptance(string body)
     {
         var reply = await Exchange(new Stub(HttpStatusCode.Created, body)).PlaceAsync(Buy);
 
-        Assert.Equal(new ExchangeReply.NoAnswer("exchange answered 201 without an order number"), reply);
+        Assert.Equal(new ExchangeReply.NoAnswer("exchange answered 201 without an order number or run"), reply);
     }
 }

@@ -61,6 +61,7 @@ internal sealed class OrderRow
     public decimal BlockedAmount { get; set; }
     public OrderStatus Status { get; set; }
     public long? ExchangeOrderId { get; set; }
+    public long? ExchangeRunId { get; set; }
     public string? RejectionReason { get; set; }
     public bool FundsBlocked { get; set; }
     public bool FundsReleased { get; set; }

@@ -30,7 +30,7 @@ public class TradeSettlementTests
         var order = Order.Place(OrderId.New(), _client, key, request, Commission.Standard);
         await _ledger.PostAsync(order.BlockKey, order.BlockEntry());
         order.MarkFundsBlocked();
-        order.Accept(exchangeId);
+        order.Accept(exchangeId, 1);
         _orders.Put(await _orders.AddOrGetAsync(order));
         _orders.Put(order);
         return order;
@@ -126,7 +126,7 @@ public class TradeSettlementTests
         Assert.Equal(4L, (await ReadAsync(known)).Execution.Quantity);
         Assert.Equal(SettleOutcome.NotOurs, await _settlement.SettleAsync(Trade(2, 98, 99, 1, symbol: "PKN")));
 
-        inFlight.Accept(55);
+        inFlight.Accept(55, 1);
         _orders.Put(inFlight);
         Assert.Equal(SettleOutcome.Settled, await _settlement.SettleAsync(Trade(1, 99, 7, 4)));
         Assert.Equal(4L, (await ReadAsync(known)).Execution.Quantity);
@@ -250,7 +250,7 @@ public class TradeSettlementTests
         // Odpowiedz REST przychodzi dokladnie miedzy wyszukaniem po numerze a dalszymi krokami rozliczenia.
         _orders.AfterLookup = () =>
         {
-            sending.Accept(55);
+            sending.Accept(55, 1);
             _orders.Put(sending);
             _orders.AfterLookup = null;
         };

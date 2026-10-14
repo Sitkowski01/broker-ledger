@@ -41,6 +41,13 @@ public sealed partial class Order
 
     public OrderStatus Status { get; private set; } = OrderStatus.Pending;
     public long? ExchangeOrderId { get; private set; }
+
+    /// <summary>
+    /// Przebieg gieldy, w ktorym zlecenie dostalo numer. Start gieldy bez wznowienia zaczyna nowy przebieg z pustymi
+    /// arkuszami i numeracja od 1 — numer bez przebiegu moglby wskazac cudze zlecenie. Pusty w zleceniach sprzed
+    /// tej kolumny.
+    /// </summary>
+    public long? ExchangeRunId { get; private set; }
     public string? RejectionReason { get; private set; }
     public bool FundsBlocked { get; private set; }
     public bool FundsReleased { get; private set; }
@@ -130,13 +137,14 @@ public sealed partial class Order
 
     /// <summary>Odtworzenie z bazy — bez regul skladania, bo stan juz kiedys je przeszedl.</summary>
     public static Order Restore(OrderId id, ClientId client, string clientKey, OrderRequest request,
-        decimal blockedAmount, OrderStatus status, long? exchangeOrderId, string? rejectionReason,
+        decimal blockedAmount, OrderStatus status, long? exchangeOrderId, long? exchangeRunId, string? rejectionReason,
         bool fundsBlocked, bool fundsReleased, int submitAttempts, int version, OrderExecution execution) =>
         new(id, client, clientKey, request, blockedAmount)
         {
             Execution = execution ?? throw new ArgumentNullException(nameof(execution)),
             Status = status,
             ExchangeOrderId = exchangeOrderId,
+            ExchangeRunId = exchangeRunId,
             RejectionReason = rejectionReason,
             FundsBlocked = fundsBlocked,
             FundsReleased = fundsReleased,
@@ -152,17 +160,19 @@ public sealed partial class Order
         FundsBlocked = true;
     }
 
-    /// <summary>Gielda przyjela zlecenie. Powtorka z tym samym numerem (np. po wyjasnieniu) niczego nie zmienia.</summary>
-    public void Accept(long exchangeOrderId)
+    /// <summary>Gielda przyjela zlecenie. Powtorka z tym samym numerem i przebiegiem (np. po wyjasnieniu) niczego nie zmienia.</summary>
+    public void Accept(long exchangeOrderId, long runId)
     {
-        if (Status == OrderStatus.Accepted && ExchangeOrderId == exchangeOrderId)
+        if (Status == OrderStatus.Accepted && ExchangeOrderId == exchangeOrderId && ExchangeRunId == runId)
         {
             return;
         }
         Require(Status is OrderStatus.Pending or OrderStatus.Unknown && FundsBlocked, "accept");
         ArgumentOutOfRangeException.ThrowIfLessThan(exchangeOrderId, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(runId, 1);
         Status = OrderStatus.Accepted;
         ExchangeOrderId = exchangeOrderId;
+        ExchangeRunId = runId;
     }
 
     /// <summary>Zlecenie zaraz pojdzie na gielde — kolejna proba.</summary>

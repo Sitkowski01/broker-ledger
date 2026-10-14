@@ -58,7 +58,7 @@ public class SettlementPropertyTests
             new OrderRequest("CDR", scenario.Side, OrderType.Limit, limit, scenario.Quantity), Commission.Standard);
         ledger.Post(order.BlockEntry());
         order.MarkFundsBlocked();
-        order.Accept(1);
+        order.Accept(1, 1);
 
         var fills = scenario.Cancel ? scenario.Fills[..^1] : scenario.Fills;
         var sequence = 0;

@@ -8,7 +8,7 @@ public partial class OrderSagaTests
     public async Task Crash_after_blocking_resumes_without_blocking_twice()
     {
         _orders.FailOnSave = 1;
-        _exchange.Then(new ExchangeReply.Accepted(9));
+        _exchange.Then(new ExchangeReply.Accepted(9, 1));
         var placed = NewBuy();
 
         await Assert.ThrowsAsync<TimeoutException>(() => PlaceAsync(placed));
@@ -44,7 +44,7 @@ public partial class OrderSagaTests
     [Fact]
     public async Task Repeated_request_with_the_same_key_is_the_same_order()
     {
-        _exchange.Then(new ExchangeReply.Accepted(1));
+        _exchange.Then(new ExchangeReply.Accepted(1, 1));
         var first = await PlaceAsync(NewBuy("same"));
 
         var again = await PlaceAsync(NewBuy("same"));
@@ -57,7 +57,7 @@ public partial class OrderSagaTests
     [Fact]
     public async Task Stale_copy_cannot_overwrite_a_newer_state()
     {
-        _exchange.Then(new ExchangeReply.NoAnswer("timeout")).Then(new ExchangeReply.Accepted(3));
+        _exchange.Then(new ExchangeReply.NoAnswer("timeout")).Then(new ExchangeReply.Accepted(3, 1));
         var order = await PlaceAsync(NewBuy());
         var stale = await _orders.GetAsync(order.Id);
         await _saga.ProgressAsync(order);
@@ -70,7 +70,7 @@ public partial class OrderSagaTests
     [Fact]
     public async Task Cancel_asks_the_exchange_and_waits_for_its_event()
     {
-        _exchange.Then(new ExchangeReply.Accepted(11)).ThenCancel(CancelReply.Cancelled);
+        _exchange.Then(new ExchangeReply.Accepted(11, 1)).ThenCancel(CancelReply.Cancelled);
         var order = await PlaceAsync(NewBuy());
 
         Assert.Equal(CancelReply.Cancelled, await _saga.CancelAsync(order));
@@ -86,7 +86,7 @@ public partial class OrderSagaTests
     [Fact]
     public async Task Cancel_overtaken_by_settlement_still_succeeded()
     {
-        _exchange.Then(new ExchangeReply.Accepted(11)).ThenCancel(CancelReply.Cancelled);
+        _exchange.Then(new ExchangeReply.Accepted(11, 1)).ThenCancel(CancelReply.Cancelled);
         var order = await PlaceAsync(NewBuy());
         // Zdarzenie anulowania z gieldy rozliczono, zanim saga zapisala prosbe — zapis przegrywa wyscig o wersje.
         _orders.ConflictOnSave = _orders.Saves + 1;
@@ -100,7 +100,7 @@ public partial class OrderSagaTests
     [InlineData(CancelReply.NoAnswer)]
     public async Task Cancel_that_did_not_happen_leaves_the_order_open(CancelReply reply)
     {
-        _exchange.Then(new ExchangeReply.Accepted(11)).ThenCancel(reply);
+        _exchange.Then(new ExchangeReply.Accepted(11, 1)).ThenCancel(reply);
         var order = await PlaceAsync(NewBuy());
 
         Assert.Equal(reply, await _saga.CancelAsync(order));
@@ -139,7 +139,7 @@ public partial class OrderSagaTests
     [Fact]
     public async Task Two_senders_at_once_send_once()
     {
-        _exchange.Then(new ExchangeReply.NoAnswer("timeout")).Then(new ExchangeReply.Accepted(8));
+        _exchange.Then(new ExchangeReply.NoAnswer("timeout")).Then(new ExchangeReply.Accepted(8, 1));
         var unknown = await PlaceAsync(NewBuy());
         var requestCopy = (await _orders.GetAsync(unknown.Id))!;
         var reconcilerCopy = (await _orders.GetAsync(unknown.Id))!;

@@ -80,7 +80,7 @@ public sealed partial class OrderRepositoryTests(PostgresFixture postgres) : IAs
     public async Task Reconciler_sees_only_unfinished_orders_old_enough()
     {
         var pending = await _orders.AddOrGetAsync(NewOrder("pending"));
-        var accepted = await Saved(NewOrder("accepted"), o => { o.MarkFundsBlocked(); o.Accept(1); });
+        var accepted = await Saved(NewOrder("accepted"), o => { o.MarkFundsBlocked(); o.Accept(1, 1); });
         var toRelease = await Saved(NewOrder("release"), o => { o.MarkFundsBlocked(); o.Reject("busy"); });
         await Saved(NewOrder("released"), o => { o.MarkFundsBlocked(); o.Reject("busy"); o.MarkFundsReleased(); });
         await Saved(NewOrder("no-funds"), o => o.Reject("insufficient funds"));

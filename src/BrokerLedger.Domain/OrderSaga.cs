@@ -41,7 +41,7 @@ public sealed class OrderSaga(IOrderRepository orders, ILedgerStore ledger, IExc
             switch (reply)
             {
                 case ExchangeReply.Accepted accepted:
-                    order.Accept(accepted.ExchangeOrderId);
+                    order.Accept(accepted.ExchangeOrderId, accepted.RunId);
                     break;
                 case ExchangeReply.Refused refused:
                     order.Reject(refused.Reason);

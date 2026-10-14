@@ -10,7 +10,7 @@ public partial class OrderTests
     {
         var order = Place(request);
         order.MarkFundsBlocked();
-        order.Accept(ExchangeId);
+        order.Accept(ExchangeId, 1);
         return order;
     }
 
@@ -156,7 +156,7 @@ public partial class OrderTests
         Assert.True(order.IsInFlight);
         order.MarkUnknown();
         Assert.True(order.IsInFlight);
-        order.Accept(ExchangeId);
+        order.Accept(ExchangeId, 1);
         Assert.False(order.IsInFlight);
     }
 }

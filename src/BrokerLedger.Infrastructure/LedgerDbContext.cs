@@ -96,6 +96,8 @@ internal sealed class LedgerDbContext(DbContextOptions<LedgerDbContext> options)
                 t.HasCheckConstraint("ck_orders_released_only_if_blocked", "not funds_released or funds_blocked");
                 t.HasCheckConstraint("ck_orders_submit_attempts_not_negative", "submit_attempts >= 0");
                 t.HasCheckConstraint("ck_orders_filled_within_quantity", "filled_quantity between 0 and quantity");
+                // Przebieg mowi, do ktorej numeracji gieldy nalezy numer — bez numeru nie ma czego opisywac.
+                t.HasCheckConstraint("ck_orders_run_only_with_number", "exchange_run_id is null or exchange_order_id is not null");
                 // Ostatnie zdarzenie to para (przebieg, numer) — albo cala, albo wcale.
                 t.HasCheckConstraint("ck_orders_last_event_complete",
                     "(last_event_run_id is null) = (last_event_sequence is null)");

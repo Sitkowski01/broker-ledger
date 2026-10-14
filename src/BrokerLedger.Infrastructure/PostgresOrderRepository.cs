@@ -61,6 +61,7 @@ internal sealed class PostgresOrderRepository(IDbContextFactory<LedgerDbContext>
             .ExecuteUpdateAsync(s => s
                 .SetProperty(o => o.Status, order.Status)
                 .SetProperty(o => o.ExchangeOrderId, order.ExchangeOrderId)
+                .SetProperty(o => o.ExchangeRunId, order.ExchangeRunId)
                 .SetProperty(o => o.RejectionReason, order.RejectionReason)
                 .SetProperty(o => o.FundsBlocked, order.FundsBlocked)
                 .SetProperty(o => o.FundsReleased, order.FundsReleased)
@@ -121,7 +122,7 @@ internal sealed class PostgresOrderRepository(IDbContextFactory<LedgerDbContext>
     private static Order ToOrder(OrderRow row) => Order.Restore(
         new OrderId(row.Id), new ClientId(row.ClientId), row.ClientKey,
         new OrderRequest(row.Symbol, row.Side, row.Type, row.LimitPrice, row.Quantity),
-        row.BlockedAmount, row.Status, row.ExchangeOrderId, row.RejectionReason,
+        row.BlockedAmount, row.Status, row.ExchangeOrderId, row.ExchangeRunId, row.RejectionReason,
         row.FundsBlocked, row.FundsReleased, row.SubmitAttempts, row.Version,
         new OrderExecution(row.FilledQuantity, row.FilledValue, row.FilledCommission,
             row.LastEventRunId is { } run && row.LastEventSequence is { } sequence ? new EventPosition(run, sequence) : null));

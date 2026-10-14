@@ -103,7 +103,7 @@ internal sealed class InMemoryOrders : IOrderRepository
 
     /// <summary>Kopia jak po odczycie z bazy — test nie moze przypadkiem dzielic obiektu z repozytorium.</summary>
     internal static Order Copy(Order o) => Order.Restore(o.Id, o.Client, o.ClientKey, o.Request, o.BlockedAmount,
-        o.Status, o.ExchangeOrderId, o.RejectionReason, o.FundsBlocked, o.FundsReleased, o.SubmitAttempts, o.Version,
+        o.Status, o.ExchangeOrderId, o.ExchangeRunId, o.RejectionReason, o.FundsBlocked, o.FundsReleased, o.SubmitAttempts, o.Version,
         o.Execution);
 }
 

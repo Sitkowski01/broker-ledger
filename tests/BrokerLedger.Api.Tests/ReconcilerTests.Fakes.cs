@@ -56,7 +56,7 @@ public partial class ReconcilerTests
         {
             Calls++;
             cancellationToken.ThrowIfCancellationRequested();
-            return Task.FromResult<ExchangeReply>(new ExchangeReply.Accepted(Calls));
+            return Task.FromResult<ExchangeReply>(new ExchangeReply.Accepted(Calls, 1));
         }
 
         public Task<CancelReply> CancelAsync(Order order, CancellationToken cancellationToken = default) => throw new NotSupportedException();

@@ -311,6 +311,10 @@ namespace BrokerLedger.Infrastructure.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("exchange_order_id");
 
+                    b.Property<long?>("ExchangeRunId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("exchange_run_id");
+
                     b.Property<decimal>("FilledCommission")
                         .HasColumnType("numeric(20,2)")
                         .HasColumnName("filled_commission");
@@ -414,6 +418,8 @@ namespace BrokerLedger.Infrastructure.Migrations
                             t.HasCheckConstraint("ck_orders_quantity_positive", "quantity > 0");
 
                             t.HasCheckConstraint("ck_orders_released_only_if_blocked", "not funds_released or funds_blocked");
+
+                            t.HasCheckConstraint("ck_orders_run_only_with_number", "exchange_run_id is null or exchange_order_id is not null");
 
                             t.HasCheckConstraint("ck_orders_submit_attempts_not_negative", "submit_attempts >= 0");
                         });

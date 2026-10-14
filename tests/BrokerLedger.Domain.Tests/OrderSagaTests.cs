@@ -29,7 +29,7 @@ public partial class OrderSagaTests
     [Fact]
     public async Task Accepted_order_keeps_its_funds_blocked()
     {
-        _exchange.Then(new ExchangeReply.Accepted(17));
+        _exchange.Then(new ExchangeReply.Accepted(17, 1));
 
         var order = await PlaceAsync(NewBuy());
 
@@ -76,7 +76,7 @@ public partial class OrderSagaTests
     [Fact]
     public async Task No_answer_keeps_the_block_until_the_order_is_explained()
     {
-        _exchange.Then(new ExchangeReply.NoAnswer("timeout")).Then(new ExchangeReply.Accepted(5));
+        _exchange.Then(new ExchangeReply.NoAnswer("timeout")).Then(new ExchangeReply.Accepted(5, 1));
 
         var unknown = await PlaceAsync(NewBuy());
         Assert.Equal(OrderStatus.Unknown, unknown.Status);

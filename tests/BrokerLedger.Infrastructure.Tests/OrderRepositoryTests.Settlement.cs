@@ -7,7 +7,7 @@ public sealed partial class OrderRepositoryTests
     private static void AcceptAs(Order order, long exchangeId)
     {
         order.MarkFundsBlocked();
-        order.Accept(exchangeId);
+        order.Accept(exchangeId, 3);
     }
 
     private static ExchangeEvent.Trade Fill(long sequence, long quantity, decimal price = 250m) =>
@@ -25,6 +25,7 @@ public sealed partial class OrderRepositoryTests
         var read = (await _orders.GetAsync(order.Id))!;
 
         Assert.Equal(new OrderExecution(4, 1001.60m, 3.91m, new EventPosition(3, 12)), read.Execution);
+        Assert.Equal((7L, 3L), (read.ExchangeOrderId, read.ExchangeRunId));
         Assert.Equal(OrderExecution.None, (await _orders.AddOrGetAsync(NewOrder("fresh"))).Execution);
     }
 

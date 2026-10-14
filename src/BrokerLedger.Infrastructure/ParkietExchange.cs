@@ -55,8 +55,10 @@ internal sealed class ParkietExchange(HttpClient http) : IExchange
         }
         try
         {
+            // Z przebiegiem gielda nie anuluje cudzego zlecenia, ktore po jej starcie od zera dostalo ten sam numer.
+            var run = order.ExchangeRunId is { } runId ? $"?runId={runId}" : "";
             using var response = await http.DeleteAsync(
-                new Uri($"api/instruments/{order.Symbol}/orders/{exchangeOrderId}", UriKind.Relative), cancellationToken);
+                new Uri($"api/instruments/{order.Symbol}/orders/{exchangeOrderId}{run}", UriKind.Relative), cancellationToken);
             return response.StatusCode switch
             {
                 HttpStatusCode.OK => CancelReply.Cancelled,
@@ -79,18 +81,23 @@ internal sealed class ParkietExchange(HttpClient http) : IExchange
         || (e is TaskCanceledException && !cancellationToken.IsCancellationRequested);
 
     /// <summary>
-    /// Przyjete tylko z numerem zlecenia. Sukces bez numeru (np. strona bledu proxy z kodem 200) nie jest
-    /// przyjeciem — zostaje do wyjasnienia, jak brak odpowiedzi.
+    /// Przyjete tylko z numerem zlecenia i przebiegiem gieldy. Sukces bez nich (np. strona bledu proxy z kodem 200)
+    /// nie jest przyjeciem — zostaje do wyjasnienia, jak brak odpowiedzi.
     /// </summary>
     private static async Task<ExchangeReply> AcceptedAsync(HttpResponseMessage response, CancellationToken cancellationToken)
     {
         var body = await JsonAsync(response, cancellationToken);
         return body.ValueKind == JsonValueKind.Object
-               && body.TryGetProperty("orderId", out var id) && id.ValueKind == JsonValueKind.Number
-               && id.TryGetInt64(out var orderId) && orderId > 0
-            ? new ExchangeReply.Accepted(orderId)
-            : new ExchangeReply.NoAnswer($"exchange answered {(int)response.StatusCode} without an order number");
+               && PositiveLong(body, "orderId") is { } orderId && PositiveLong(body, "runId") is { } runId
+            ? new ExchangeReply.Accepted(orderId, runId)
+            : new ExchangeReply.NoAnswer($"exchange answered {(int)response.StatusCode} without an order number or run");
     }
+
+    private static long? PositiveLong(JsonElement body, string name) =>
+        body.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number
+        && value.TryGetInt64(out var number) && number > 0
+            ? number
+            : null;
 
     private static async Task<JsonElement> JsonAsync(HttpResponseMessage response, CancellationToken cancellationToken) =>
         await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken);

@@ -44,7 +44,8 @@ public abstract record ExchangeReply
     {
     }
 
-    public sealed record Accepted(long ExchangeOrderId) : ExchangeReply;
+    /// <param name="RunId">Przebieg gieldy — numer zlecenia jest unikalny tylko w nim.</param>
+    public sealed record Accepted(long ExchangeOrderId, long RunId) : ExchangeReply;
 
     /// <summary>Gielda na pewno nie przyjela zlecenia (zla tresc, nieznana spolka).</summary>
     public sealed record Refused(string Reason) : ExchangeReply;

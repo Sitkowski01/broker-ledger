@@ -106,10 +106,10 @@ public sealed partial class FakeParkiet
         var cid = body.GetProperty("clientOrderId").GetString()!;
         if (_byClientOrderId.TryGetValue(cid, out var earlier))
         {
-            return Json(HttpStatusCode.OK, new { orderId = earlier, clientOrderId = cid, repeated = true, events = Array.Empty<object>() });
+            return Json(HttpStatusCode.OK, new { orderId = earlier, runId = 1, clientOrderId = cid, repeated = true, events = Array.Empty<object>() });
         }
         var id = PlaceOnce(symbol, body);
-        return Json(HttpStatusCode.Created, new { orderId = id, clientOrderId = cid, events = Array.Empty<object>() });
+        return Json(HttpStatusCode.Created, new { orderId = id, runId = 1, clientOrderId = cid, events = Array.Empty<object>() });
     }
 
     private long PlaceOnce(string symbol, JsonElement body)

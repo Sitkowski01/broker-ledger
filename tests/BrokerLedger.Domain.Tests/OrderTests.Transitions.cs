@@ -10,11 +10,13 @@ public partial class OrderTests
         var order = Place();
 
         order.MarkFundsBlocked();
-        order.Accept(42);
-        order.Accept(42);
+        order.Accept(42, 1);
+        order.Accept(42, 1);
 
-        Assert.Equal((OrderStatus.Accepted, 42L), (order.Status, order.ExchangeOrderId));
+        Assert.Equal((OrderStatus.Accepted, 42L, 1L), (order.Status, order.ExchangeOrderId, order.ExchangeRunId));
         Assert.False(order.NeedsAttention);
+        // Ten sam numer z innego przebiegu to inne zlecenie — nie powtorka.
+        Assert.Throws<InvalidOrderTransitionException>(() => order.Accept(42, 2));
     }
 
     [Fact]
@@ -25,7 +27,7 @@ public partial class OrderTests
         accepted.MarkUnknown();
         accepted.MarkUnknown();
         Assert.True(accepted.NeedsAttention);
-        accepted.Accept(7);
+        accepted.Accept(7, 1);
 
         var rejected = Place();
         rejected.MarkFundsBlocked();
@@ -66,15 +68,16 @@ public partial class OrderTests
     {
         var order = Place();
 
-        var ex = Assert.Throws<InvalidOrderTransitionException>(() => order.Accept(1));
+        var ex = Assert.Throws<InvalidOrderTransitionException>(() => order.Accept(1, 1));
 
         Assert.Equal($"order {order.Id} in status Pending cannot accept", ex.Message);
         Assert.Equal(OrderStatus.Pending, ex.Status);
         Assert.Throws<InvalidOrderTransitionException>(order.RequestCancel);
         order.MarkFundsBlocked();
-        Assert.Throws<ArgumentOutOfRangeException>(() => order.Accept(0));
-        order.Accept(3);
-        Assert.Throws<InvalidOrderTransitionException>(() => order.Accept(4));
+        Assert.Throws<ArgumentOutOfRangeException>(() => order.Accept(0, 1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => order.Accept(3, 0));
+        order.Accept(3, 1);
+        Assert.Throws<InvalidOrderTransitionException>(() => order.Accept(4, 1));
         Assert.Throws<InvalidOrderTransitionException>(order.MarkUnknown);
         Assert.Throws<InvalidOrderTransitionException>(() => order.Reject("x"));
         Assert.Throws<InvalidOrderTransitionException>(order.MarkFundsBlocked);
@@ -90,14 +93,14 @@ public partial class OrderTests
 
         var execution = new OrderExecution(4, 1000m, 3.9m, new EventPosition(1, 8));
 
-        var order = Order.Restore(id, Client, "k", BuyLimit, 99m, OrderStatus.Rejected, 5, "busy", true, false, 2, 3, execution);
+        var order = Order.Restore(id, Client, "k", BuyLimit, 99m, OrderStatus.Rejected, 5, 6, "busy", true, false, 2, 3, execution);
 
         Assert.Equal((id, Client, "k", BuyLimit, 99m), (order.Id, order.Client, order.ClientKey, order.Request, order.BlockedAmount));
         Assert.Same(execution, order.Execution);
         Assert.Throws<ArgumentNullException>(() =>
-            Order.Restore(id, Client, "k", BuyLimit, 99m, OrderStatus.Rejected, 5, "busy", true, false, 2, 3, null!));
-        Assert.Equal((OrderStatus.Rejected, (long?)5, "busy", true, false, 2, 3),
-            (order.Status, order.ExchangeOrderId, order.RejectionReason, order.FundsBlocked, order.FundsReleased, order.SubmitAttempts, order.Version));
+            Order.Restore(id, Client, "k", BuyLimit, 99m, OrderStatus.Rejected, 5, 6, "busy", true, false, 2, 3, null!));
+        Assert.Equal((OrderStatus.Rejected, (long?)5, (long?)6, "busy", true, false, 2, 3),
+            (order.Status, order.ExchangeOrderId, order.ExchangeRunId, order.RejectionReason, order.FundsBlocked, order.FundsReleased, order.SubmitAttempts, order.Version));
         Assert.Equal(("CDR", OrderSide.Buy, OrderType.Limit, (decimal?)250.40m, 10L),
             (order.Symbol, order.Side, order.Type, order.LimitPrice, order.Quantity));
         order.MarkSaved();
@@ -109,7 +112,7 @@ public partial class OrderTests
     {
         var accepted = Place();
         accepted.MarkFundsBlocked();
-        accepted.Accept(1);
+        accepted.Accept(1, 1);
 
         string Action(Action move) => Assert.Throws<InvalidOrderTransitionException>(move).Message.Split(" cannot ")[1];
 
