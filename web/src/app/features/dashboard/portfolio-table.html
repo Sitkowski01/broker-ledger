@@ -1,0 +1,88 @@
+<div class="bar">
+  <h2 id="portfolio-title">Portfel</h2>
+  <span class="pill count">{{ count() }}</span>
+  <span class="meta hide-sm">Ceny: ostatnia transakcja</span>
+</div>
+
+@if (rows().length) {
+  <div class="desk">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Walor</th>
+          <th scope="col">Ilość</th>
+          <th scope="col">Śr. zakup</th>
+          <th scope="col">Ostatnia</th>
+          <th scope="col">Wartość</th>
+          <th scope="col">Udział</th>
+          <th scope="col">Wynik</th>
+          <th scope="col"><span class="sr-only">Akcja</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (r of rows(); track r.symbol) {
+          <tr>
+            <th scope="row">
+              <span class="walor">
+                <span class="badge num" aria-hidden="true">{{ r.symbol }}</span>
+                <span class="names"><span class="name">{{ r.name }}</span><span class="num sub">{{ r.symbol }} · Parkiet</span></span>
+              </span>
+            </th>
+            <td class="num">{{ r.quantity }}</td>
+            <td class="num dim">{{ r.average }}</td>
+            <td class="num"><span class="stack"><span>{{ r.last }}</span><span class="sub">{{ r.at }}</span></span></td>
+            <td class="num strong">{{ r.value }}</td>
+            <td>
+              <span class="share">
+                <span class="track" aria-hidden="true"><span [style.width]="r.width"></span></span>
+                <span class="num sub">{{ r.share }}</span>
+              </span>
+            </td>
+            <td class="num">
+              <span class="stack pnl" [class]="r.trend"><span>{{ arrow(r.trend) }} {{ r.pnl }}</span><span class="pct">{{ r.percent }}</span></span>
+            </td>
+            <td class="action">
+              <a class="trade" routerLink="/zlecenia" [queryParams]="{ walor: r.symbol }" [attr.aria-label]="'Handluj: ' + r.name">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M7 7h11v11M7 18 18 7" /></svg>
+              </a>
+            </td>
+          </tr>
+        }
+      </tbody>
+      <tfoot>
+        <tr>
+          <th scope="row" class="micro">Razem</th>
+          <td></td>
+          <td class="num dim">{{ total().cost }}</td>
+          <td></td>
+          <td class="num strong">{{ total().value }}</td>
+          <td class="num sub">100%</td>
+          <td class="num"><span class="stack pnl" [class]="total().trend"><span>{{ arrow(total().trend) }} {{ total().pnl }}</span><span class="pct">{{ total().percent }}</span></span></td>
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <ul class="mob">
+    @for (r of rows(); track r.symbol) {
+      <li>
+        <a routerLink="/zlecenia" [queryParams]="{ walor: r.symbol }">
+          <span class="badge num" aria-hidden="true">{{ r.symbol }}</span>
+          <span class="names"><span class="name">{{ r.name }}</span><span class="num sub">{{ r.quantity }} × {{ r.last }} · {{ r.share }}</span></span>
+          <span class="stack"><span class="num strong">{{ r.value }}</span><span class="num pnl" [class]="r.trend">{{ arrow(r.trend) }} {{ r.pnl }}</span></span>
+        </a>
+      </li>
+    }
+    <li class="sum num">
+      <span class="micro">Razem</span>
+      <span class="sum-values"><span class="strong">{{ total().value }}</span><span class="pnl" [class]="total().trend">{{ arrow(total().trend) }} {{ total().pnl }}</span></span>
+    </li>
+  </ul>
+} @else {
+  <div class="empty">
+    <p class="name">Nie masz jeszcze akcji</p>
+    <p class="hint">Kupione walory pojawią się tutaj z wyceną po ostatniej transakcji na giełdzie.</p>
+    <a class="ghost" routerLink="/zlecenia">Złóż pierwsze zlecenie</a>
+  </div>
+}
