@@ -1,10 +1,11 @@
 import { HttpErrorResponse } from '@angular/common/http';
+import { formatPrice, formatQuantity } from '../format/money';
 
 /** Blad API przetlumaczony na to, co ekran ma pokazac. */
 export type ApiError =
   | { readonly kind: 'validation'; readonly fields: Readonly<Record<string, string>> }
   | { readonly kind: 'rate-limited'; readonly retryAfterSeconds: number; readonly message: string }
-  | { readonly kind: 'offline' | 'unauthorized' | 'conflict' | 'not-found' | 'server'; readonly message: string };
+  | { readonly kind: 'offline' | 'unauthorized' | 'conflict' | 'not-found' | 'insufficient' | 'rejected' | 'server'; readonly message: string };
 
 /** Komunikaty po polsku dla pol, ktore API waliduje (API odpowiada po angielsku, dla programistow). */
 const FIELD_MESSAGES: Readonly<Record<string, string>> = {
@@ -15,6 +16,9 @@ const FIELD_MESSAGES: Readonly<Record<string, string>> = {
   limitPrice: 'Podaj cenę w złotych, np. 248,40.',
   symbol: 'Wybierz walor.',
 };
+
+/** Tytul odpowiedzi API, gdy ksiega nie pozwala zejsc z saldem ponizej zera (LedgerExceptionHandler). */
+const INSUFFICIENT = 'Insufficient funds';
 
 export function toApiError(error: unknown): ApiError {
   if (!(error instanceof HttpErrorResponse)) {
@@ -31,6 +35,12 @@ export function toApiError(error: unknown): ApiError {
       return { kind: 'not-found', message: 'Nie znaleziono.' };
     case 409:
       return { kind: 'conflict', message: titleOf(error.error) ?? 'Konflikt z aktualnym stanem.' };
+    case 422:
+      // 422 to dwa rozne przypadki: ksiega odmowila, bo saldo zeszloby ponizej zera (np. pieniadze wydane
+      // w drugiej karcie), albo gielda odrzucila zlecenie — wtedy w tresci jest zlecenie, nie brak srodkow.
+      return titleOf(error.error) === INSUFFICIENT
+        ? { kind: 'insufficient', message: insufficientMessage(error.error) }
+        : { kind: 'rejected', message: 'Operacja odrzucona.' };
     case 429: {
       const seconds = Number(error.headers.get('Retry-After')) || 60;
       return { kind: 'rate-limited', retryAfterSeconds: seconds, message: `Za dużo prób. Spróbuj ponownie za ${seconds} s.` };
@@ -45,6 +55,18 @@ function fieldsOf(body: unknown): Record<string, string> {
   return Object.fromEntries(
     Object.entries(errors).map(([field, messages]) => [field, FIELD_MESSAGES[field] ?? messages[0] ?? 'Niepoprawna wartość.']),
   );
+}
+
+function insufficientMessage(body: unknown): string {
+  const { asset, available } = (body as { asset?: string; available?: string } | null) ?? {};
+  if (asset === 'PLN' && available) {
+    return `Za mało wolnych środków. Dostępne: ${formatPrice(available)} zł.`;
+  }
+  return asset && available ? `Za mało akcji ${asset}. Dostępne: ${quantityText(available)} szt.` : 'Za mało wolnych środków.';
+}
+
+function quantityText(value: string): string {
+  return /^\d+$/.test(value) ? formatQuantity(Number(value)) : value;
 }
 
 function titleOf(body: unknown): string | undefined {

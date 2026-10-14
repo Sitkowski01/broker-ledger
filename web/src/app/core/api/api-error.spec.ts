@@ -34,6 +34,24 @@ describe('toApiError', () => {
     expect(toApiError(http(status)).kind).toBe(kind);
   });
 
+  it('tells how much is left when the ledger refuses to go below zero', () => {
+    expect(toApiError(http(422, { title: 'Insufficient funds', asset: 'PLN', available: '8214.36' }))).toEqual({
+      kind: 'insufficient',
+      message: 'Za mało wolnych środków. Dostępne: 8 214,36 zł.',
+    });
+    const short = (body: object) => toApiError(http(422, { title: 'Insufficient funds', ...body }));
+    expect(short({ asset: 'CDR', available: '1200' })).toMatchObject({ message: 'Za mało akcji CDR. Dostępne: 1 200 szt.' });
+    expect(short({ asset: 'CDR', available: '1.5' })).toMatchObject({ message: 'Za mało akcji CDR. Dostępne: 1.5 szt.' });
+    expect(short({ asset: 'PLN' })).toMatchObject({ message: 'Za mało wolnych środków.' });
+    expect(short({})).toMatchObject({ kind: 'insufficient', message: 'Za mało wolnych środków.' });
+  });
+
+  it('does not call a rejected order a lack of money', () => {
+    // POST /api/orders odpowiada 422 z samym zleceniem, gdy gielda je odrzuci.
+    expect(toApiError(http(422, { id: 'o1', status: 'Rejected', reason: 'market closed' }))).toEqual({ kind: 'rejected', message: 'Operacja odrzucona.' });
+    expect(toApiError(http(422, null))).toMatchObject({ kind: 'rejected' });
+  });
+
   it('keeps the title of a conflict and survives non-HTTP errors', () => {
     expect(toApiError(http(409, { title: 'E-mail already registered' }))).toMatchObject({ message: 'E-mail already registered' });
     expect(toApiError(new Error('boom'))).toMatchObject({ kind: 'server' });
