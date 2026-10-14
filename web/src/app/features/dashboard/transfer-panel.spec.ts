@@ -185,4 +185,46 @@ describe('TransferPanel', () => {
     expect(panel.el.querySelector('.field-error')).toBeNull();
     expect(panel.text()).toContain('W demo przelew z banku księguje się od razu.');
   });
+
+  it('lists the recent transfers with a link to the ledger', async () => {
+    const panel = await render();
+    panel.fixture.componentRef.setInput('recent', [{ sequence: 7, label: 'Wpłata z banku', amount: '+10 000,00', trend: 'up', at: 'dziś, 18:05' }]);
+    await panel.stable();
+
+    expect(panel.text()).toContain('Ostatnie przelewy');
+    const link = panel.el.querySelector<HTMLAnchorElement>('.recent a')!;
+    expect(link.getAttribute('href')).toBe('/ksiega');
+    expect(link.getAttribute('aria-label')).toBe('Dokument nr 7 w księdze');
+    expect(panel.el.querySelector('.recent .amount')?.classList).toContain('up');
+  });
+
+  it('ignores an error of an attempt the client already changed', async () => {
+    const panel = await render();
+    await panel.submit();
+    const old = backend.expectOne('/api/me/deposits');
+    await panel.type('200');
+
+    old.flush(null, { status: 0, statusText: 'Unknown Error' });
+    await panel.stable();
+
+    expect(panel.el.querySelector('[role="alert"]')).toBeNull();
+    expect(panel.text()).toContain('Wpłać 200,00 zł');
+  });
+
+  it('still reports a transfer that went through after the form changed', async () => {
+    const panel = await render();
+    await panel.submit();
+    const old = backend.expectOne('/api/me/deposits');
+    const key = old.request.headers.get('Idempotency-Key');
+    await panel.click('Wypłata');
+
+    old.flush({ outcome: 'posted' }, { status: 201, statusText: 'Created' });
+    await panel.stable();
+
+    expect(panel.el.querySelector('[role="status"]')?.textContent).toContain('zaksięgowana');
+    expect(panel.posted).toHaveBeenCalledTimes(1);
+    await panel.type('10');
+    await panel.submit();
+    expect(backend.expectOne('/api/me/withdrawals').request.headers.get('Idempotency-Key')).not.toBe(key);
+  });
 });
