@@ -1,0 +1,65 @@
+<div class="bar">
+  <h2 id="transfer-title">Przelew</h2>
+  <span class="meta">PLN · natychmiast</span>
+</div>
+<form class="body" (submit)="submit($event)" novalidate>
+  <div class="seg" role="group" aria-label="Rodzaj przelewu">
+    <button type="button" [attr.aria-pressed]="kind() === 'deposit'" (click)="setKind('deposit')">Wpłata</button>
+    <button type="button" [attr.aria-pressed]="kind() === 'withdrawal'" (click)="setKind('withdrawal')">Wypłata</button>
+  </div>
+
+  <div class="form-group">
+    <label class="label" for="amount">Kwota</label>
+    <div class="field amount" [class.invalid]="fieldError()">
+      <input id="amount" class="num" inputmode="decimal" autocomplete="off" [formControl]="amount"
+             [attr.aria-invalid]="!!fieldError()" aria-describedby="amount-hint" />
+      <span class="micro">PLN</span>
+    </div>
+    <div class="chips">
+      @for (q of quick(); track q.label) {
+        <button type="button" class="chip num" (click)="applyQuick(q)">{{ q.label }}</button>
+      }
+    </div>
+    @if (fieldError(); as message) {
+      <p id="amount-hint" class="field-error">{{ message }}</p>
+    } @else {
+      <p id="amount-hint" class="hint">
+        @if (kind() === 'deposit') {
+          W demo przelew z banku księguje się od razu.
+        } @else {
+          Do wypłaty: <span class="num">{{ availableText() }} zł</span>. Środki pod zleceniami zostają.
+        }
+      </p>
+    }
+  </div>
+
+  @if (generalError(); as message) {
+    <p class="alert error" role="alert">{{ message }}</p>
+  }
+  <p class="done" role="status">{{ done() }}</p>
+
+  <button class="btn" type="submit" [disabled]="pending()">
+    {{ pending() ? 'Księguję…' : cta() }}
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+  </button>
+  <p class="note">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6z" /><path d="m9 12 2 2 4-4" /></svg>
+    <span>Przelew to dokument Wn/Ma w księdze. Ponowione kliknięcie niczego nie zaksięguje drugi raz.</span>
+  </p>
+
+  @if (recent().length) {
+    <div class="recent">
+      <h3 class="micro">Ostatnie przelewy</h3>
+      <ul>
+        @for (t of recent(); track t.sequence) {
+          <li>
+            <span>{{ t.label }}</span>
+            <span class="num amount" [class]="t.trend">{{ t.amount }}</span>
+            <span class="num when">{{ t.at }}</span>
+            <a class="num doc" routerLink="/ksiega" [attr.aria-label]="'Dokument nr ' + t.sequence + ' w księdze'">#{{ t.sequence }}</a>
+          </li>
+        }
+      </ul>
+    </div>
+  }
+</form>
