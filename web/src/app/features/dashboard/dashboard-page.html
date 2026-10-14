@@ -1,0 +1,27 @@
+<bl-page-header [kicker]="'Rachunek maklerski · ' + today()" title="Pulpit" />
+
+@if (stale()) {
+  <p class="alert warn" role="status">
+    NBP chwilowo nie odpowiada. Wartości w innych walutach liczymy z ostatniej pobranej tabeli
+    <span class="num">{{ portfolio()?.rates?.table }}</span> — ponowimy próbę przy kolejnym odświeżeniu.
+  </p>
+}
+
+@if (loadError(); as message) {
+  <div class="alert error" role="alert">
+    <span>{{ message }}</span>
+    <button type="button" class="ghost" (click)="reload()">Spróbuj ponownie</button>
+  </div>
+}
+
+@if (ready()) {
+  <div class="row">
+    <bl-account-value class="wide" [portfolio]="portfolio()!" [available]="cash().available" [blocked]="cash().blocked" />
+    <bl-transfer-panel class="narrow" [available]="cash().available" [recent]="recent()" (posted)="reload()" />
+  </div>
+  <bl-portfolio-table [portfolio]="portfolio()!" [now]="now()" />
+} @else if (!loadError()) {
+  <section class="panel loading" aria-busy="true" aria-label="Wczytywanie rachunku">
+    <div class="bar"><h2>Wartość rachunku</h2><span class="meta">Wczytywanie…</span></div>
+  </section>
+}

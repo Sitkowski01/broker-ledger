@@ -1,0 +1,34 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  align-items: stretch;
+}
+
+/* Nie rozciagamy panelu wartosci do wysokosci przelewu — w etapie 8g wypelni go wykres wyniku. */
+.wide {
+  align-self: flex-start;
+  flex: 999 1 min(640px, 100%);
+  min-width: 0;
+}
+
+.narrow {
+  flex: 1 1 min(360px, 100%);
+  min-width: 0;
+}
+
+.alert.error {
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.loading {
+  min-height: 240px;
+}
