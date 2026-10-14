@@ -236,9 +236,14 @@ zwolnienie reszty
   więc nigdy nie przekroczy blokady. Nie więcej niż wartość — sprzedaż jednej akcji za 2 zł nie zadłuża klienta.
 - **Kupno poniżej limitu** zużywa mniej, niż zablokowano; resztę zwalnia pełne wykonanie albo anulowanie.
 - **Numer zlecenia giełdy** jest unikalny w spółce i przebiegu giełdy — po starcie Parkietu bez wznowienia
-  numeracja rusza od nowa. Broker bierze najnowsze otwarte zlecenie z tym numerem, które nie rozliczyło nic późniejszego.
-  Ograniczenie: Parkiet nie podaje przebiegu w odpowiedzi REST, więc zlecenia otwarte w chwili takiego restartu
-  (giełda o nich zapomina, nie wysyłając anulowania) zostają u brokera otwarte i trzeba je zamknąć ręcznie.
+  numeracja rusza od nowa. Broker zapisuje przebieg (`runId` z odpowiedzi REST) razem z numerem i dopasowuje zdarzenia
+  po całej trójce: spółka, przebieg, numer. Anulowanie też idzie z przebiegiem, więc nie zdejmie cudzego zlecenia.
+- **Restart giełdy od zera** — giełda zapomina otwarte zlecenia, nie wysyłając anulowania. Broker zamyka je przy
+  pierwszym zdarzeniu nowego przebiegu na spółce i zwalnia resztę blokady. Wcześniej nie wolno: Kafka trzyma kolejność
+  w spółce (klucz = spółka, outbox Parkietu wysyła po kolei), więc dopiero wtedy wiadomo, że żadna transakcja starego
+  przebiegu już nie dojdzie. Ograniczenia: zamknięcie czeka na transakcję albo anulowanie na tej spółce (wejście
+  zlecenia do arkusza broker w Kafce pomija); numery przebiegów muszą rosnąć, więc bazy
+  Parkietu nie czyści się osobno od bazy brokera; zlecenia sprzed zapisu przebiegu nie są zamykane automatycznie.
 - Bez `ExchangeEvents:BootstrapServers` broker działa bez Kafki (np. lokalnie bez giełdy) — zlecenia czekają.
 
 Zlecenie w API pokazuje wykonanie: `filledQuantity`, `filledValue`, `commission`, a status przechodzi
@@ -324,7 +329,7 @@ dotnet stryker -f stryker-api.json              # testy mutacyjne API na testach
 | Rozliczenie (jednostkowe) | częściowe i pełne wykonanie, anulowanie, transakcja między dwoma klientami brokera, zdarzenie nie do tego zlecenia, czekanie na zlecenie w drodze, awaria po zaksięgowaniu i przed zwolnieniem — dokończona powtórką |
 | Rozliczenie (FsCheck) | losowy podział zlecenia na transakcje po losowych cenach, czasem anulowane: blokada zawsze kończy na zerze, prowizja raz od całości, gotówka i akcje się zgadzają |
 | Kafka (integracyjne) | prawdziwa Kafka i PostgreSQL w Dockerze: format zdarzeń Parkietu, powtórki, zepsute wiadomości, offset po restarcie konsumenta, awaria bazy ponawiana |
-| E2E rozliczenia | HTTP → Parkiet w pamięci → zdarzenie na Kafce → skrzynka → księga → salda przez HTTP; także transakcja dla zlecenia `unknown`, która czeka na reconciler |
+| E2E rozliczenia | HTTP → Parkiet w pamięci → zdarzenie na Kafce → skrzynka → księga → salda przez HTTP; także transakcja dla zlecenia `unknown`, która czeka na reconciler, i restart giełdy od zera, po którym wraca reszta blokady |
 | Portfel (jednostkowe + FsCheck) | średnia z prowizją, częściowa i pełna sprzedaż, prowizja równa wartości, blokady bez wpływu, akcje z kosztem 0; losowe ciągi kupna i sprzedaży nie gubią ani nie dorabiają grosza |
 | Kursy NBP | format tabeli A i odrzucanie zepsutych odpowiedzi; pamięć, przeterminowana tabela, przerwa po awarii, jedno zapytanie dla wielu żądań; prawdziwy potok odporności: 5xx ponawiane, zawieszona próba ucięta, 404 bez ponowień |
 | E2E portfela | HTTP → księga i skrzynka w PostgreSQL → atrapa NBP: wycena, waluty, NBP leży, tabela przeterminowana; pełna droga zlecenie → Kafka → rozliczenie → portfel wyceniony po późniejszej cudzej transakcji |
