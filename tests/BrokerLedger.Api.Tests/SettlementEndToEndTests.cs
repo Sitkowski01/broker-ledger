@@ -67,6 +67,28 @@ public sealed class SettlementEndToEndTests(KafkaBrokerApi api)
     }
 
     [Fact]
+    public async Task Exchange_restart_closes_the_order_and_frees_the_rest_of_the_block()
+    {
+        using var http = await FundedClientAsync();
+        var order = await PlaceAsync(http, new { symbol = "KTY", side = "buy", type = "limit", limitPrice = "100.00", quantity = 10 });
+        var exchangeId = ExchangeId(order);
+        await api.TradeAsync("KTY", Stranger, exchangeId, "BUY", 100_00, 3);
+        await WaitForAsync(http, order, o => o.GetProperty("filledQuantity").GetInt64() == 3);
+
+        // Gielda startuje od pustych arkuszy. Anulowanie idzie z przebiegiem, wiec nie trafi w nowe zlecenie z tym numerem.
+        api.Parkiet.Restart();
+        var cancel = await http.DeleteAsync(new Uri($"/api/me/orders/{order}", UriKind.Relative));
+        Assert.Equal(HttpStatusCode.Conflict, cancel.StatusCode);
+        // Pierwsze zdarzenie nowego przebiegu na spolce zamyka zlecenie starego.
+        await api.TradeAsync("KTY", Stranger, Stranger + 1, "BUY", 100_00, 1);
+
+        await WaitForStatusAsync(http, order, "cancelled");
+        // 3 x 100 zl + minimalna prowizja 3 zl; reszta blokady wrocila.
+        Assert.Equal(("9697.00", "0.00"), await BalanceAsync(http, "PLN"));
+        Assert.Equal(("3", "0"), await BalanceAsync(http, "KTY"));
+    }
+
+    [Fact]
     public async Task Repeated_event_is_settled_once()
     {
         using var http = await FundedClientAsync();

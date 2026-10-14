@@ -294,6 +294,21 @@ public class TradeSettlementTests
     }
 
     [Fact]
+    public async Task Pass_closes_earlier_run_orders_when_the_run_changes_mid_pass()
+    {
+        var order = await AcceptedAsync(7);
+        await _inbox.AddAsync(Trade(1, 98, 99, 1));
+        await _inbox.AddAsync(new ExchangeEvent.Trade("CDR", new EventPosition(2, 1), 98, 99, OrderSide.Buy, 250m, 1));
+        await _inbox.AddAsync(new ExchangeEvent.Trade("CDR", new EventPosition(2, 2), 98, 99, OrderSide.Buy, 250m, 1));
+
+        var pass = await _settlement.SettlePendingAsync(10);
+
+        Assert.Equal(3, pass.Settled);
+        Assert.Equal((OrderStatus.Cancelled, true), ((await ReadAsync(order)).Status, (await ReadAsync(order)).FundsReleased));
+        Assert.Equal(10_000m, Balance(AccountId.Available(_client, Pln)));
+    }
+
+    [Fact]
     public async Task Order_accepted_while_its_trade_is_being_matched_is_not_taken_for_a_stranger()
     {
         var sending = Order.Place(OrderId.New(), _client, "sending",

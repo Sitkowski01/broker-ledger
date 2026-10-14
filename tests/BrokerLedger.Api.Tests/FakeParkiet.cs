@@ -39,6 +39,22 @@ public sealed partial class FakeParkiet
     private readonly ConcurrentDictionary<(string Symbol, long Id), bool> _open = new();
     private long _nextId;
 
+    /// <summary>Przebieg gieldy — jak runId Parkietu. Zdarzenia z Kafki w testach niosa ten sam.</summary>
+    public long Run => Interlocked.Read(ref _run);
+    private long _run = 1;
+
+    /// <summary>
+    /// Start gieldy bez wznowienia: nowy przebieg, puste arkusze, numeracja od 1 i bez pamieci clientOrderId.
+    /// Zlecenia brokera z poprzedniego przebiegu zostaja u niego otwarte, dopoki nie zamknie ich rozliczenie.
+    /// </summary>
+    public void Restart()
+    {
+        _open.Clear();
+        _byClientOrderId.Clear();
+        Interlocked.Exchange(ref _nextId, 0);
+        Interlocked.Increment(ref _run);
+    }
+
     /// <summary>Kazde zlecenie, ktore naprawde weszlo do arkusza.</summary>
     public ConcurrentQueue<JsonElement> Placed { get; } = new();
 
@@ -94,6 +110,12 @@ public sealed partial class FakeParkiet
             }
             Interlocked.Exchange(ref _silentCancels, 0);
             var key = (cancel.Groups[1].Value, long.Parse(cancel.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture));
+            // Jak Parkiet: numer z innego przebiegu to nie to zlecenie, nawet jesli taki numer jest w arkuszu.
+            var run = System.Web.HttpUtility.ParseQueryString(request.RequestUri.Query)["runId"];
+            if (run is not null && run != Run.ToString(System.Globalization.CultureInfo.InvariantCulture))
+            {
+                return Problem(HttpStatusCode.NotFound, $"order {key.Item2} of run {run} is not in the book");
+            }
             return _open.TryRemove(key, out _)
                 ? Json(HttpStatusCode.OK, new { type = "CANCELLED", orderId = key.Item2, quantity = 1, reason = "REQUESTED" })
                 : Problem(HttpStatusCode.NotFound, "order not in book");
@@ -106,10 +128,10 @@ public sealed partial class FakeParkiet
         var cid = body.GetProperty("clientOrderId").GetString()!;
         if (_byClientOrderId.TryGetValue(cid, out var earlier))
         {
-            return Json(HttpStatusCode.OK, new { orderId = earlier, runId = 1, clientOrderId = cid, repeated = true, events = Array.Empty<object>() });
+            return Json(HttpStatusCode.OK, new { orderId = earlier, runId = Run, clientOrderId = cid, repeated = true, events = Array.Empty<object>() });
         }
         var id = PlaceOnce(symbol, body);
-        return Json(HttpStatusCode.Created, new { orderId = id, runId = 1, clientOrderId = cid, events = Array.Empty<object>() });
+        return Json(HttpStatusCode.Created, new { orderId = id, runId = Run, clientOrderId = cid, events = Array.Empty<object>() });
     }
 
     private long PlaceOnce(string symbol, JsonElement body)

@@ -4,10 +4,10 @@ namespace BrokerLedger.Infrastructure.Tests;
 
 public sealed partial class OrderRepositoryTests
 {
-    private static void AcceptAs(Order order, long exchangeId)
+    private static void AcceptAs(Order order, long exchangeId, long run = 3)
     {
         order.MarkFundsBlocked();
-        order.Accept(exchangeId, 3);
+        order.Accept(exchangeId, run);
     }
 
     private static ExchangeEvent.Trade Fill(long sequence, long quantity, decimal price = 250m) =>
@@ -67,6 +67,30 @@ public sealed partial class OrderRepositoryTests
     }
 
     [Fact]
+    public async Task Finds_orders_still_open_from_earlier_runs()
+    {
+        var older = await Saved(NewOrder("run 1"), o => AcceptAs(o, 7, run: 1));
+        _clock.Advance(TimeSpan.FromSeconds(1));
+        var cancelling = await Saved(NewOrder("run 2"), o => { AcceptAs(o, 8, run: 2); o.RequestCancel(); });
+        await Saved(NewOrder("current"), o => AcceptAs(o, 9, run: 3));
+        await Saved(NewOrder("other symbol", Buy with { Symbol = "PKN" }), o => AcceptAs(o, 7, run: 1));
+        await Saved(NewOrder("finished"), o =>
+        {
+            AcceptAs(o, 10, run: 1);
+            o.ApplyCancellation(new ExchangeEvent.Cancelled("CDR", new EventPosition(1, 4), 10, 10, "REQUESTED"));
+        });
+        // Zlecenie sprzed kolumny z przebiegiem — nie wiadomo, z ktorego jest.
+        var legacy = await Saved(NewOrder("legacy"), o => AcceptAs(o, 11, run: 1));
+        await _db.ExecuteAsync($"UPDATE orders SET exchange_run_id = NULL WHERE id = '{legacy.Id}'");
+
+        var open = await _orders.OpenBeforeRunAsync("CDR", 3);
+
+        Assert.Equal([older.Id, cancelling.Id], open.Select(o => o.Id));
+        Assert.Equal([older.Id], (await _orders.OpenBeforeRunAsync("CDR", 2)).Select(o => o.Id));
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => _orders.OpenBeforeRunAsync(" ", 3));
+    }
+
+    [Fact]
     public async Task Order_is_in_flight_once_it_may_have_reached_the_exchange()
     {
         await _orders.AddOrGetAsync(NewOrder("not sent"));
@@ -89,6 +113,7 @@ public sealed partial class OrderRepositoryTests
         await Assert.ThrowsAnyAsync<Exception>(() => _db.ExecuteAsync($"UPDATE orders SET filled_quantity = 11 WHERE id = '{order.Id}'"));
         await Assert.ThrowsAnyAsync<Exception>(() => _db.ExecuteAsync($"UPDATE orders SET filled_quantity = -1 WHERE id = '{order.Id}'"));
         await Assert.ThrowsAnyAsync<Exception>(() => _db.ExecuteAsync($"UPDATE orders SET last_event_run_id = 1 WHERE id = '{order.Id}'"));
+        await Assert.ThrowsAnyAsync<Exception>(() => _db.ExecuteAsync($"UPDATE orders SET exchange_order_id = NULL WHERE id = '{order.Id}'"));
         Assert.Equal(1, await _db.ExecuteAsync($"UPDATE orders SET filled_quantity = 10 WHERE id = '{order.Id}'"));
     }
 }

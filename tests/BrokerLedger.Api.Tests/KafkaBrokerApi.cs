@@ -31,13 +31,13 @@ public sealed class KafkaBrokerApi : BrokerApi
     public Task<long> TradeAsync(string symbol, long maker, long taker, string takerSide, long priceInGrosze, long quantity,
         long? repeat = null) =>
         PublishAsync(symbol, repeat, sequence => $$"""
-            {"runId":1,"symbol":"{{symbol}}","sequence":{{sequence}},"timestamp":"2026-10-12T10:00:00Z","type":"TRADE",
+            {"runId":{{Parkiet.Run}},"symbol":"{{symbol}}","sequence":{{sequence}},"timestamp":"2026-10-12T10:00:00Z","type":"TRADE",
              "makerOrderId":{{maker}},"takerOrderId":{{taker}},"takerSide":"{{takerSide}}","price":{{priceInGrosze}},"quantity":{{quantity}}}
             """);
 
     public Task<long> CancelledAsync(string symbol, long orderId, long quantity, string reason) =>
         PublishAsync(symbol, null, sequence => $$"""
-            {"runId":1,"symbol":"{{symbol}}","sequence":{{sequence}},"type":"CANCELLED","orderId":{{orderId}},"quantity":{{quantity}},"reason":"{{reason}}"}
+            {"runId":{{Parkiet.Run}},"symbol":"{{symbol}}","sequence":{{sequence}},"type":"CANCELLED","orderId":{{orderId}},"quantity":{{quantity}},"reason":"{{reason}}"}
             """);
 
     /// <summary><paramref name="repeat"/>: numer juz wyslanego zdarzenia — Kafka dostarcza co najmniej raz.</summary>

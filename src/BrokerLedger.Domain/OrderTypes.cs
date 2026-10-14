@@ -32,7 +32,10 @@ public enum OrderStatus
     /// <summary>Wykonane w calosci. Niewykorzystana czesc blokady (kupno ponizej limitu) wraca do klienta.</summary>
     Filled,
 
-    /// <summary>Gielda zdjela reszte zlecenia (anulowanie albo PKC bez ofert). Reszta blokady wraca do klienta.</summary>
+    /// <summary>
+    /// Gielda zdjela reszte zlecenia (anulowanie, PKC bez ofert albo start gieldy od pustych arkuszy).
+    /// Reszta blokady wraca do klienta.
+    /// </summary>
     Cancelled,
 }
 
