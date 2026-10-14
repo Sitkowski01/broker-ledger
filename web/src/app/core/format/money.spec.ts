@@ -1,5 +1,5 @@
 import fc from 'fast-check';
-import { formatCents, formatPrice, formatSigned, parseCents, toApiAmount } from './money';
+import { formatCents, formatPrice, formatQuantity, formatSigned, parseCents, toApiAmount } from './money';
 
 describe('money', () => {
   it('reads API and typed amounts into whole grosze', () => {
@@ -8,9 +8,11 @@ describe('money', () => {
     expect(parseCents(' 1 000,00 ')).toBe(100000);
     expect(parseCents('-430.00')).toBe(-43000);
     expect(parseCents('7')).toBe(700);
+    // Zmiany sald w historii przychodza ze znakiem z obu stron: "+1000.00" / "-250.40".
+    expect(parseCents('+1000.00')).toBe(100000);
   });
 
-  it.each(['', 'abc', '1.234', '1,2,3', '12.', '--5', '9'.repeat(20)])('refuses %j instead of guessing', (value) => {
+  it.each(['', 'abc', '1.234', '1,2,3', '12.', '--5', '+-5', '9'.repeat(20)])('refuses %j instead of guessing', (value) => {
     expect(parseCents(value)).toBeNull();
   });
 
@@ -19,6 +21,12 @@ describe('money', () => {
     expect(formatCents(4244653)).toBe('42 446,53');
     expect(formatCents(5)).toBe('0,05');
     expect(formatCents(-43000)).toBe('−430,00');
+  });
+
+  it('groups whole quantities the same way as amounts', () => {
+    expect(formatQuantity(60)).toBe('60');
+    expect(formatQuantity(1200)).toBe('1 200');
+    expect(formatQuantity(1234567)).toBe('1 234 567');
   });
 
   it('signs results and leaves unreadable values alone', () => {
