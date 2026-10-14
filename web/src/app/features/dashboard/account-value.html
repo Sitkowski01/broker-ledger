@@ -1,0 +1,52 @@
+<div class="bar">
+  <h2 id="value-title">Wartość rachunku</h2>
+  <span class="pill code">{{ value().code }}</span>
+  <span class="meta">{{ value().note }}</span>
+</div>
+<div class="body">
+  <div class="top">
+    <div class="figures">
+      <p class="total num" [attr.aria-label]="label()">
+        @if (value().approx) {
+          <span class="approx" aria-hidden="true">≈</span>
+        }
+        <span class="whole" aria-hidden="true">{{ value().whole }}</span>@if (value().fraction !== null) {<span class="fraction" aria-hidden="true">,{{ value().fraction }}</span>}
+        <span class="unit" aria-hidden="true">{{ value().code }}</span>
+      </p>
+      @if (pnl().percent; as percent) {
+        <p class="pnl-row">
+          <span class="pnl num" [class]="pnl().trend">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" aria-hidden="true">
+              <path [attr.d]="pnl().trend === 'down' ? 'M7 7l10 10M17 9v8H9' : 'M7 17 17 7M9 7h8v8'" />
+            </svg>
+            {{ pnl().text }} · {{ percent }}
+          </span>
+          <span class="hint">na akcjach, względem średniej ceny zakupu</span>
+        </p>
+      }
+    </div>
+    @if (currencies().length > 1) {
+      <div class="seg" role="group" aria-label="Waluta wyceny">
+        @for (c of currencies(); track c) {
+          <button type="button" [attr.aria-pressed]="c === code()" (click)="pick(c)">{{ c }}</button>
+        }
+      </div>
+    }
+  </div>
+
+  <div class="structure">
+    <div class="bars" role="img" [attr.aria-label]="structureLabel()">
+      @for (s of slices(); track s.key) {
+        <div [class]="s.key" [style.width]="s.width"></div>
+      }
+    </div>
+    <dl>
+      @for (s of slices(); track s.key) {
+        <div>
+          <dt class="micro"><span class="swatch" [class]="s.key"></span>{{ s.label }}</dt>
+          <dd class="num"><span class="amount">{{ s.value }}</span><span class="share">{{ s.percent }}</span></dd>
+        </div>
+      }
+    </dl>
+  </div>
+</div>
