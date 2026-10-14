@@ -34,6 +34,7 @@ public sealed class TradeSettlement(IOrderRepository orders, ILedgerStore ledger
     {
         var stopped = new HashSet<string>();
         var inFlight = new Dictionary<string, bool>();
+        var runChecked = new Dictionary<string, long>();
         var failures = new List<(ExchangeEvent, Exception)>();
         var settled = 0;
         foreach (var pending in await inbox.PendingAsync(limitPerSymbol, cancellationToken))
@@ -44,6 +45,13 @@ public sealed class TradeSettlement(IOrderRepository orders, ILedgerStore ledger
             }
             try
             {
+                // Stryker disable all : pamiec podreczna przebiegu — mutanty zmieniaja tylko liczbe zapytan, nie wynik
+                if (!runChecked.TryGetValue(pending.Symbol, out var run) || run != pending.Position.RunId)
+                {
+                    await CloseEarlierRunAsync(pending, cancellationToken);
+                    runChecked[pending.Symbol] = pending.Position.RunId;
+                }
+                // Stryker restore all
                 // Raz na spolke w przebiegu, ale zawsze PO odczycie skrzynki — patrz SettleAsync.
                 if (!inFlight.TryGetValue(pending.Symbol, out var waitingPossible))
                 {
@@ -77,12 +85,33 @@ public sealed class TradeSettlement(IOrderRepository orders, ILedgerStore ledger
     /// zlecenie przyjete w miedzyczasie i tak sie znajdzie, a zlecenie wyslane pozniej nie moze miec zdarzenia,
     /// ktore juz lezalo w skrzynce. W odwrotnej kolejnosci zlecenie przyjete miedzy jednym a drugim zapytaniem
     /// nie byloby ani znalezione, ani "w drodze" — i jego transakcja przepadlaby jako cudza.
+    /// Za kazdym razem pyta tez o zlecenia wczesniejszych przebiegow (przebieg po skrzynce robi to raz na spolke).
     /// </summary>
     public async Task<SettleOutcome> SettleAsync(ExchangeEvent exchangeEvent, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(exchangeEvent);
+        await CloseEarlierRunAsync(exchangeEvent, cancellationToken);
         var waitingPossible = await orders.HasInFlightAsync(exchangeEvent.Symbol, cancellationToken);
         return await SettleAsync(exchangeEvent, waitingPossible, cancellationToken);
+    }
+
+    /// <summary>
+    /// Gielda wystartowala bez wznowienia: nowy przebieg zaczyna od pustych arkuszy, wiec zlecenia przyjete w starym
+    /// sa juz tylko u brokera. Zamykamy je przy pierwszym zdarzeniu nowego przebiegu na spolce. Wczesniej nie mozna:
+    /// Kafka trzyma kolejnosc w obrebie spolki, a skrzynka rozlicza spolke po kolei, wiec dopiero teraz wiadomo,
+    /// ze kazda transakcja starego przebiegu z tej spolki jest juz rozliczona.
+    /// Dwa warunki: zdarzenie nowego przebiegu musi przyjsc (RESTED nie trafia do skrzynki, wiec na spolce bez transakcji
+    /// i anulowan zlecenie czeka), a przebiegi musza rosnac — baza Parkietu czyszczona osobno od brokera zaczelaby od 1.
+    /// </summary>
+    private async Task CloseEarlierRunAsync(ExchangeEvent exchangeEvent, CancellationToken cancellationToken)
+    {
+        var runId = exchangeEvent.Position.RunId;
+        foreach (var order in await orders.OpenBeforeRunAsync(exchangeEvent.Symbol, runId, cancellationToken))
+        {
+            order.CloseAfterExchangeRestart(runId);
+            await OrderSaga.SaveAsync(order, orders, cancellationToken);
+            await OrderSaga.ReleaseAsync(order, orders, ledger, cancellationToken);
+        }
     }
 
     private async Task<SettleOutcome> SettleAsync(ExchangeEvent exchangeEvent, bool waitingPossible, CancellationToken cancellationToken)
@@ -108,13 +137,18 @@ public sealed class TradeSettlement(IOrderRepository orders, ILedgerStore ledger
     }
 
     /// <summary>
-    /// Zlecenie, ktore rozliczylo dokladnie to zdarzenie jako ostatnie (powtorka po awarii — moze trzeba dokonczyc
-    /// zwolnienie), a jesli takiego nie ma — najnowsze otwarte zlecenie z tym numerem, ktore nie rozliczylo jeszcze nic pozniejszego. Najnowsze, bo po starcie gieldy
-    /// bez wznowienia numeracja rusza od nowa, a starsze zlecenie z tym numerem pochodzi z poprzedniego przebiegu.
+    /// Zlecenie z tym numerem z przebiegu zdarzenia: to, ktore rozliczylo dokladnie to zdarzenie jako ostatnie (powtorka
+    /// po awarii — moze trzeba dokonczyc zwolnienie), a jesli takiego nie ma — otwarte, ktore nie rozliczylo jeszcze nic
+    /// pozniejszego. Zlecenia sprzed zapisu przebiegu pasuja do kazdego przebiegu; z nich bierzemy najnowsze, bo po starcie
+    /// gieldy bez wznowienia numeracja rusza od nowa, a starsze zlecenie z tym numerem pochodzi z poprzedniego przebiegu.
+    /// Znana luka: zlecenie "nieznane" przyjete w starym przebiegu i wyslane ponownie w nowym dostaje nowy numer, wiec
+    /// jego transakcje ze starego przebiegu wygladaja na cudze (gielda zapomniala clientOrderId razem z przebiegiem).
     /// </summary>
     private async Task<Order?> FindAsync(ExchangeEvent exchangeEvent, long exchangeOrderId, CancellationToken cancellationToken)
     {
-        var candidates = await orders.ByExchangeOrderIdAsync(exchangeEvent.Symbol, exchangeOrderId, cancellationToken);
+        var candidates = (await orders.ByExchangeOrderIdAsync(exchangeEvent.Symbol, exchangeOrderId, cancellationToken))
+            .Where(o => o.ExchangeRunId is null || o.ExchangeRunId == exchangeEvent.Position.RunId)
+            .ToList();
         return candidates.FirstOrDefault(o => o.Execution.LastEvent == exchangeEvent.Position)
                ?? candidates.LastOrDefault(o => o.IsOpenOnExchange && !o.Execution.Includes(exchangeEvent.Position));
     }

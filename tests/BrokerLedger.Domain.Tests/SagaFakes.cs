@@ -95,6 +95,10 @@ internal sealed class InMemoryOrders : IOrderRepository
         return Task.FromResult(found);
     }
 
+    public Task<IReadOnlyList<Order>> OpenBeforeRunAsync(string symbol, long runId, CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<Order>>(_stored.Values
+            .Where(o => o.Symbol == symbol && o.IsOpenOnExchange && o.ExchangeRunId < runId).Select(Copy).ToList());
+
     public Task<bool> HasInFlightAsync(string symbol, CancellationToken cancellationToken = default) =>
         Task.FromResult(_stored.Values.Any(o => o.Symbol == symbol && o.IsInFlight));
 

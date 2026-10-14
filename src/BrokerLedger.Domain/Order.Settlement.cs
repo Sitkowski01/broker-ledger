@@ -12,6 +12,17 @@ public sealed partial class Order
 
     public long RemainingQuantity => Quantity - Execution.Quantity;
 
+    /// <summary>
+    /// Gielda zaczela przebieg <paramref name="newRunId"/> od pustych arkuszy, wiec tego zlecenia juz na niej nie ma.
+    /// Wolac dopiero po rozliczeniu wszystkich zdarzen starego przebiegu z tej spolki — inaczej transakcja, ktora
+    /// jeszcze nie doszla, nie mialaby do czego trafic.
+    /// </summary>
+    public void CloseAfterExchangeRestart(long newRunId)
+    {
+        Require(IsOpenOnExchange && ExchangeRunId < newRunId, "close after an exchange restart");
+        Status = OrderStatus.Cancelled;
+    }
+
     /// <summary>Ile blokady jeszcze nie zuzyto: przy kupnie w zl, przy sprzedazy w akcjach.</summary>
     public decimal RemainingBlocked => Side == OrderSide.Buy
         ? BlockedAmount - Execution.Value - Execution.Commission
@@ -89,6 +100,10 @@ public sealed partial class Order
         if (e.Symbol != Symbol || !e.ExchangeOrderIds.Contains(ExchangeOrderId!.Value))
         {
             throw Mismatch(e, $"it is about {e.Symbol} orders {string.Join(", ", e.ExchangeOrderIds)}");
+        }
+        if (ExchangeRunId is { } run && run != e.Position.RunId)
+        {
+            throw Mismatch(e, $"the order was accepted in exchange run {run}");
         }
     }
 

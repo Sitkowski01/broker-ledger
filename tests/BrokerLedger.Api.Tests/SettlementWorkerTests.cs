@@ -166,6 +166,9 @@ public class SettlementWorkerTests
                 ? Task.FromException<IReadOnlyList<Order>>(new TimeoutException(Error))
                 : Task.FromResult<IReadOnlyList<Order>>([]);
 
+        public Task<IReadOnlyList<Order>> OpenBeforeRunAsync(string symbol, long runId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<Order>>([]);
+
         public Task<bool> HasInFlightAsync(string symbol, CancellationToken cancellationToken = default) => Task.FromResult(false);
 
         public Task<Order> AddOrGetAsync(Order order, CancellationToken cancellationToken = default) => throw new NotSupportedException();

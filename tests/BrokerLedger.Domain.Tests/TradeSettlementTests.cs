@@ -21,8 +21,9 @@ public class TradeSettlementTests
 
     private decimal Balance(AccountId account) => _ledger.Ledger.Balance(account);
 
-    /// <summary>Zlecenie przyjete przez gielde z numerem <paramref name="exchangeId"/>, srodki zablokowane.</summary>
-    private async Task<Order> AcceptedAsync(long exchangeId, OrderSide side = OrderSide.Buy, long quantity = 10, string key = "k")
+    /// <summary>Zlecenie przyjete przez gielde z numerem <paramref name="exchangeId"/> w przebiegu <paramref name="run"/>, srodki zablokowane.</summary>
+    private async Task<Order> AcceptedAsync(long exchangeId, OrderSide side = OrderSide.Buy, long quantity = 10, string key = "k",
+        long run = 1)
     {
         var request = side == OrderSide.Buy
             ? new OrderRequest("CDR", side, OrderType.Limit, 250m, quantity)
@@ -30,7 +31,7 @@ public class TradeSettlementTests
         var order = Order.Place(OrderId.New(), _client, key, request, Commission.Standard);
         await _ledger.PostAsync(order.BlockKey, order.BlockEntry());
         order.MarkFundsBlocked();
-        order.Accept(exchangeId, 1);
+        order.Accept(exchangeId, run);
         _orders.Put(await _orders.AddOrGetAsync(order));
         _orders.Put(order);
         return order;
@@ -153,7 +154,7 @@ public class TradeSettlementTests
         var settled = await AcceptedAsync(7, quantity: 5, key: "settled");
         await _settlement.SettleAsync(Trade(1, 99, 7, 2));
         // Gielda ruszyla bez wznowienia i dala ten sam numer nowemu zleceniu; potem wraca powtorka starego zdarzenia.
-        var newer = await AcceptedAsync(7, quantity: 5, key: "newer");
+        var newer = await AcceptedAsync(7, quantity: 5, key: "newer", run: 2);
 
         await _settlement.SettleAsync(Trade(1, 99, 7, 2));
 
@@ -206,7 +207,7 @@ public class TradeSettlementTests
     {
         var old = await AcceptedAsync(7, quantity: 1, key: "old");
         await _settlement.SettleAsync(Trade(1, 99, 7, 1));
-        var current = await AcceptedAsync(7, quantity: 2, key: "new");
+        var current = await AcceptedAsync(7, quantity: 2, key: "new", run: 2);
 
         await _settlement.SettleAsync(new ExchangeEvent.Trade("CDR", new EventPosition(2, 1), 99, 7, OrderSide.Buy, 250m, 2));
 
@@ -214,28 +215,82 @@ public class TradeSettlementTests
     }
 
     [Fact]
-    public async Task Of_two_open_orders_with_one_number_the_newer_one_is_settled()
+    public async Task Of_two_open_orders_with_one_number_the_one_from_the_events_run_is_settled()
     {
-        // Zlecenie z poprzedniego przebiegu gieldy zostalo otwarte u brokera, choc gieldy juz go nie zna.
+        // Zlecenie z poprzedniego przebiegu gieldy zostalo otwarte u brokera, choc gielda juz go nie zna.
         var stale = await AcceptedAsync(7, quantity: 5, key: "stale");
-        var current = await AcceptedAsync(7, quantity: 5, key: "current");
+        var current = await AcceptedAsync(7, quantity: 5, key: "current", run: 2);
 
         await _settlement.SettleAsync(new ExchangeEvent.Trade("CDR", new EventPosition(2, 1), 99, 7, OrderSide.Buy, 250m, 2));
 
         Assert.Equal((0L, 2L), ((await ReadAsync(stale)).Execution.Quantity, (await ReadAsync(current)).Execution.Quantity));
+        // Pierwsze zdarzenie nowego przebiegu zamyka zlecenie starego — blokada zostaje tylko na biezacym.
+        Assert.Equal((OrderStatus.Cancelled, true), ((await ReadAsync(stale)).Status, (await ReadAsync(stale)).FundsReleased));
+        Assert.Equal(current.BlockedAmount - 500m - 3m, Balance(AccountId.Blocked(_client, Pln)));
     }
 
     [Fact]
-    public async Task Later_event_of_another_order_does_not_count_as_this_one_settled()
+    public async Task Event_goes_to_the_order_of_its_own_run()
     {
-        // Zdarzenie (1, 900) czeka w skrzynce, a nowsze zlecenie z tym samym numerem rozliczylo juz (2, 3).
+        // Ten sam numer w dwoch przebiegach; zdarzenie starego przebiegu nie moze dotknac zlecenia nowego.
         var older = await AcceptedAsync(5, quantity: 3, key: "older");
-        var newer = await AcceptedAsync(5, quantity: 3, key: "newer");
-        await _settlement.SettleAsync(new ExchangeEvent.Trade("CDR", new EventPosition(2, 3), 99, 5, OrderSide.Buy, 250m, 1));
+        var newer = await AcceptedAsync(5, quantity: 3, key: "newer", run: 2);
 
         await _settlement.SettleAsync(new ExchangeEvent.Cancelled("CDR", new EventPosition(1, 900), 5, 3, "REQUESTED"));
 
-        Assert.Equal((OrderStatus.Cancelled, 1L), ((await ReadAsync(older)).Status, (await ReadAsync(newer)).Execution.Quantity));
+        Assert.Equal((OrderStatus.Cancelled, OrderStatus.Accepted), ((await ReadAsync(older)).Status, (await ReadAsync(newer)).Status));
+    }
+
+    [Fact]
+    public async Task First_event_of_a_new_run_closes_open_orders_of_the_earlier_one()
+    {
+        var partial = await AcceptedAsync(7, key: "partial");
+        await _settlement.SettleAsync(Trade(1, 99, 7, 4));
+        var otherSymbol = Order.Place(OrderId.New(), _client, "pkn", new OrderRequest("PKN", OrderSide.Sell, OrderType.Limit, 50m, 1),
+            Commission.Standard);
+        otherSymbol.MarkFundsBlocked();
+        otherSymbol.Accept(3, 1);
+        _orders.Put(otherSymbol);
+        // Zlecenie sprzed zapisu przebiegu: nie wiadomo, z ktorego jest, wiec zostaje.
+        var legacy = Order.Restore(OrderId.New(), _client, "legacy", partial.Request, partial.BlockedAmount, OrderStatus.Accepted,
+            8, null, null, true, false, 1, 0, OrderExecution.None);
+        _orders.Put(legacy);
+
+        // Cudza transakcja, ale z przebiegu 2: gielda wystartowala od pustych arkuszy.
+        var outcome = await _settlement.SettleAsync(new ExchangeEvent.Trade("CDR", new EventPosition(2, 1), 98, 99, OrderSide.Buy, 250m, 1));
+
+        Assert.Equal(SettleOutcome.NotOurs, outcome);
+        var closed = await ReadAsync(partial);
+        Assert.Equal((OrderStatus.Cancelled, true, 4L), (closed.Status, closed.FundsReleased, closed.Execution.Quantity));
+        Assert.Equal((OrderStatus.Accepted, OrderStatus.Accepted), ((await ReadAsync(otherSymbol)).Status, (await ReadAsync(legacy)).Status));
+        // Wraca reszta blokady: zaplacone 1000 zl + 3,90 zl prowizji za 4 akcje.
+        Assert.Equal(10_000m - 1000m - 3.90m, Balance(AccountId.Available(_client, Pln)));
+    }
+
+    [Fact]
+    public async Task Order_without_a_run_is_still_settled_by_its_number()
+    {
+        var accepted = await AcceptedAsync(7);
+        var legacy = Order.Restore(accepted.Id, _client, accepted.ClientKey, accepted.Request, accepted.BlockedAmount,
+            OrderStatus.Accepted, 7, null, null, true, false, 1, accepted.Version, OrderExecution.None);
+        _orders.Put(legacy);
+
+        Assert.Equal(SettleOutcome.Settled, await _settlement.SettleAsync(
+            new ExchangeEvent.Trade("CDR", new EventPosition(4, 1), 99, 7, OrderSide.Buy, 250m, 2)));
+        Assert.Equal((OrderStatus.Accepted, 2L), ((await ReadAsync(legacy)).Status, (await ReadAsync(legacy)).Execution.Quantity));
+    }
+
+    [Fact]
+    public async Task Crash_before_releasing_a_closed_order_leaves_it_for_the_reconciler()
+    {
+        var order = await AcceptedAsync(7);
+        _ledger.FailOnce = order.ReleaseKey;
+
+        await Assert.ThrowsAsync<TimeoutException>(() =>
+            _settlement.SettleAsync(new ExchangeEvent.Trade("CDR", new EventPosition(2, 1), 98, 99, OrderSide.Buy, 250m, 1)));
+
+        var closed = await ReadAsync(order);
+        Assert.Equal((OrderStatus.Cancelled, false, true), (closed.Status, closed.FundsReleased, closed.NeedsAttention));
     }
 
     [Fact]

@@ -44,6 +44,9 @@ public partial class ReconcilerTests
         public Task<IReadOnlyList<Order>> ByExchangeOrderIdAsync(string symbol, long exchangeOrderId, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
+        public Task<IReadOnlyList<Order>> OpenBeforeRunAsync(string symbol, long runId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task<bool> HasInFlightAsync(string symbol, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 

@@ -123,10 +123,30 @@ public partial class OrderTests
             order.ApplyCancellation(new ExchangeEvent.Cancelled("CDR", new EventPosition(1, 1), 41, 10, "REQUESTED"))));
         Assert.Equal("exchange cancelled 9, but 10 was open", Problem(() =>
             order.ApplyCancellation(new ExchangeEvent.Cancelled("CDR", new EventPosition(1, 1), ExchangeId, 9, "REQUESTED"))));
+        Assert.Equal("the order was accepted in exchange run 1", Problem(() => order.ApplyTrade(
+            new ExchangeEvent.Trade("CDR", new EventPosition(2, 1), 99, ExchangeId, OrderSide.Buy, 1m, 1), Commission.Standard)));
         Assert.Equal((OrderStatus.Accepted, OrderExecution.None), (order.Status, order.Execution));
         // Kupno dokladnie po limicie i calosc naraz jest w porzadku.
         Settle(order, Fill(order, 1, 250.40m, 10));
         Assert.Equal(OrderStatus.Filled, order.Status);
+    }
+
+    [Fact]
+    public void Exchange_restart_closes_the_order_and_frees_what_is_left()
+    {
+        var order = Accepted();
+        Settle(order, Fill(order, 1, 250m, 4));
+
+        Assert.Throws<InvalidOrderTransitionException>(() => order.CloseAfterExchangeRestart(1));
+        order.CloseAfterExchangeRestart(2);
+
+        Assert.Equal((OrderStatus.Cancelled, true, 6L), (order.Status, order.AwaitsRelease, order.RemainingQuantity));
+        Assert.Equal("close after an exchange restart", Assert.Throws<InvalidOrderTransitionException>(
+            () => order.CloseAfterExchangeRestart(3)).Message.Split(" cannot ")[1]);
+        // Bez przebiegu (zlecenie sprzed kolumny) nie wiadomo, czy gielda je jeszcze zna.
+        var legacy = Order.Restore(OrderId.New(), Client, "k", BuyLimit, 99m, OrderStatus.Accepted, 5, null, null, true, false, 1, 0,
+            OrderExecution.None);
+        Assert.Throws<InvalidOrderTransitionException>(() => legacy.CloseAfterExchangeRestart(2));
     }
 
     [Fact]

@@ -110,6 +110,20 @@ internal sealed class PostgresOrderRepository(IDbContextFactory<LedgerDbContext>
         return rows.Select(ToOrder).ToList();
     }
 
+    public async Task<IReadOnlyList<Order>> OpenBeforeRunAsync(string symbol, long runId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(symbol);
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken);
+        // Ten sam warunek co Order.IsOpenOnExchange. Zlecenia bez przebiegu (sprzed kolumny) zostaja — nie wiadomo, skad sa.
+        var rows = await db.Orders.AsNoTracking()
+            .Where(o => o.Symbol == symbol && (o.Status == OrderStatus.Accepted || o.Status == OrderStatus.CancelRequested)
+                        && o.ExchangeRunId < runId)
+            .OrderBy(o => o.CreatedAt)
+            .ToListAsync(cancellationToken);
+        return rows.Select(ToOrder).ToList();
+    }
+
     public async Task<bool> HasInFlightAsync(string symbol, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(symbol);

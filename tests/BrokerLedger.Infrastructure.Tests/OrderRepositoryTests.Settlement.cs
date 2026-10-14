@@ -36,12 +36,12 @@ public sealed partial class OrderRepositoryTests
         var cancelled = await Saved(NewOrder("cancelled"), o =>
         {
             AcceptAs(o, 8);
-            o.ApplyCancellation(new ExchangeEvent.Cancelled("CDR", new EventPosition(1, 2), 8, 10, "REQUESTED"));
+            o.ApplyCancellation(new ExchangeEvent.Cancelled("CDR", new EventPosition(3, 2), 8, 10, "REQUESTED"));
         });
         await Saved(NewOrder("released"), o =>
         {
             AcceptAs(o, 9);
-            o.ApplyCancellation(new ExchangeEvent.Cancelled("CDR", new EventPosition(1, 3), 9, 10, "REQUESTED"));
+            o.ApplyCancellation(new ExchangeEvent.Cancelled("CDR", new EventPosition(3, 3), 9, 10, "REQUESTED"));
             o.MarkFundsReleased();
         });
 

@@ -27,6 +27,9 @@ public interface IOrderRepository
     /// </summary>
     Task<IReadOnlyList<Order>> ByExchangeOrderIdAsync(string symbol, long exchangeOrderId, CancellationToken cancellationToken = default);
 
+    /// <summary>Zlecenia otwarte na gieldzie (<see cref="Order.IsOpenOnExchange"/>), przyjete w przebiegu wczesniejszym niz <paramref name="runId"/>.</summary>
+    Task<IReadOnlyList<Order>> OpenBeforeRunAsync(string symbol, long runId, CancellationToken cancellationToken = default);
+
     /// <summary>Czy na tej spolce jest zlecenie <see cref="Order.IsInFlight"/>.</summary>
     Task<bool> HasInFlightAsync(string symbol, CancellationToken cancellationToken = default);
 }
