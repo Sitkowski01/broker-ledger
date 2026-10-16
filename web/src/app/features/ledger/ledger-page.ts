@@ -1,14 +1,20 @@
+import { httpResource } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, signal } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
-import { AccountApi, HistoryEntryDto, HistoryKind } from '../../core/account/account-api';
+import { AccountApi, ACCOUNT_URLS, BalanceDto, HistoryEntryDto, HistoryKind } from '../../core/account/account-api';
+import { cashOf } from '../../core/account/balances';
 import { toApiError } from '../../core/api/api-error';
+import { lastGood } from '../../core/api/last-good';
 import { timeOf } from '../../core/format/dates';
 import { PageHeader } from '../../shared/page-header';
 import { byDay, docView, matchesSearch } from './ledger-model';
 import { LedgerDoc } from './ledger-doc';
 import { LedgerGuide } from './ledger-guide';
+import { TAccountPanel } from './t-account';
+import { tAccount } from './t-account-model';
+import { todayEntries } from './today';
 
 /** Dokumentow na strone listy. */
 export const PAGE_SIZE = 20;
@@ -20,12 +26,13 @@ const FILTERS: readonly { key: HistoryKind | null; label: string }[] = [
   { key: 'transfers', label: 'Przelewy' },
 ];
 
-/** Ksiega: dokumenty Wn/Ma od najnowszych, filtr rodzaju (po stronie API) i wyszukiwanie. */
+/** Ksiega: dokumenty Wn/Ma od najnowszych, filtr rodzaju (po stronie API), wyszukiwanie i konto T za dzis. */
 @Component({
   selector: 'bl-ledger-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [PageHeader, LedgerDoc, LedgerGuide, ReactiveFormsModule],
+  imports: [PageHeader, LedgerDoc, LedgerGuide, TAccountPanel, ReactiveFormsModule],
   templateUrl: './ledger-page.html',
+  styleUrl: './ledger-page.css',
 })
 export class LedgerPage {
   private readonly api = inject(AccountApi);
@@ -50,8 +57,18 @@ export class LedgerPage {
   protected readonly allOpen = computed(() => this.shown().length > 0 && this.shown().every((d) => this.opened().has(d.sequence)));
   protected readonly timeOf = timeOf;
 
+  private readonly balancesResource = httpResource<BalanceDto[]>(() => ACCOUNT_URLS.balances);
+  private readonly balances = lastGood(this.balancesResource);
+  private readonly today = signal<HistoryEntryDto[] | null>(null);
+  protected readonly account = computed(() => {
+    const today = this.today();
+    const balances = this.balances();
+    return today && balances ? tAccount(today, cashOf(balances).available, this.now()) : null;
+  });
+
   constructor() {
     this.load(null);
+    this.loadToday();
     this.destroyRef.onDestroy(() => this.request?.unsubscribe());
   }
 
@@ -82,6 +99,10 @@ export class LedgerPage {
 
   protected retry(): void {
     this.load(this.entries().length ? this.next() : null);
+    this.balancesResource.reload();
+    if (this.today() === null) {
+      this.loadToday();
+    }
   }
 
   /** Pierwsza strona (before = null) zastepuje liste, kolejna dopisuje sie na koncu — kursor to numer dokumentu. */
@@ -108,4 +129,10 @@ export class LedgerPage {
     });
   }
 
+  /** Dzisiejsze dokumenty do konta T. */
+  private loadToday(): void {
+    todayEntries(this.api, new Date())
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({ next: (all) => this.today.set(all), error: () => this.today.set(null) });
+  }
 }

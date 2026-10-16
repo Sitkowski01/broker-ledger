@@ -1,0 +1,120 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.lead {
+  max-width: 68ch;
+  color: var(--text-2);
+  text-wrap: pretty;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.docs {
+  flex: 999 1 min(640px, 100%);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.side {
+  flex: 1 1 min(380px, 100%);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.search {
+  flex: 1 1 260px;
+  padding-right: 14px;
+}
+
+.search input {
+  font-size: 15px;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-2);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.chip:hover {
+  color: var(--text);
+  border-color: var(--line-strong);
+}
+
+.chip[aria-pressed='true'] {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: var(--bull);
+}
+
+.day {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.day h2 {
+  flex: none;
+}
+
+.day .line {
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+.alert.error {
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.empty,
+.loading {
+  padding: 28px 20px;
+  color: var(--text-2);
+  font-size: 14px;
+}
+
+.more {
+  align-self: center;
+}
+

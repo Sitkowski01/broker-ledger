@@ -61,6 +61,9 @@
   </div>
 
   <aside class="side">
+    @if (account(); as account) {
+      <bl-t-account [account]="account" />
+    }
     <bl-ledger-guide />
   </aside>
 </div>
