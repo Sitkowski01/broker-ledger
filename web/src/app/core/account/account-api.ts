@@ -53,8 +53,22 @@ export interface HistoryEntryDto {
   readonly description: string;
   readonly createdAt: string;
   readonly orderId: string | null;
+  /** Klucz idempotencji dokumentu: "order:{id}:block", "order:{id}:trade:...", przy przelewie klucz klienta. */
+  readonly key: string | null;
   readonly changes: readonly { readonly account: 'available' | 'blocked'; readonly asset: string; readonly change: string }[];
+  /** Caly dokument po ksiegowemu: konta klienta i brokera, strona Wn/Ma. */
+  readonly postings: readonly PostingDto[];
 }
+
+export interface PostingDto {
+  readonly owner: 'client' | 'broker';
+  readonly account: 'available' | 'blocked' | 'bank' | 'depository' | 'feeIncome';
+  readonly asset: string;
+  readonly side: 'debit' | 'credit';
+  readonly amount: string;
+}
+
+export type HistoryKind = 'transfers' | 'trades' | 'blocks';
 
 export interface HistoryPageDto {
   readonly items: readonly HistoryEntryDto[];
@@ -81,6 +95,18 @@ const TRANSFER_URLS: Readonly<Record<TransferKind, string>> = {
 @Injectable({ providedIn: 'root' })
 export class AccountApi {
   private readonly http = inject(HttpClient);
+
+  /** Strona historii od najnowszych; <code>before</code> to kursor z poprzedniej strony (nextBefore). */
+  history(limit: number, before: number | null = null, kind: HistoryKind | null = null): Observable<HistoryPageDto> {
+    const params: Record<string, string | number> = { limit };
+    if (before !== null) {
+      params['before'] = before;
+    }
+    if (kind !== null) {
+      params['kind'] = kind;
+    }
+    return this.http.get<HistoryPageDto>(ACCOUNT_URLS.history, { params });
+  }
 
   transfer(kind: TransferKind, cents: number, idempotencyKey: string): Observable<unknown> {
     return this.http.post(

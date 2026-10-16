@@ -11,8 +11,8 @@ import { PortfolioTable } from './portfolio-table';
 import { TransferPanel } from './transfer-panel';
 import { recentTransfers } from './transfer-model';
 
-/** Ile ostatnich dokumentow ksiegi przegladamy w poszukiwaniu przelewow. */
-const HISTORY_WINDOW = 50;
+/** Ile ostatnich przelewow pokazuje panel (API filtruje po rodzaju dokumentu). */
+const RECENT_TRANSFERS = 3;
 /** Co ile odswiezamy "dzis" w naglowku i przy godzinach — Pulpit bywa otwarty przez noc. */
 export const CLOCK_TICK_MS = 60_000;
 
@@ -32,7 +32,7 @@ export class DashboardPage {
   private readonly balancesResource = httpResource<BalanceDto[]>(() => ACCOUNT_URLS.balances);
   private readonly historyResource = httpResource<HistoryPageDto>(() => ({
     url: ACCOUNT_URLS.history,
-    params: { limit: HISTORY_WINDOW },
+    params: { limit: RECENT_TRANSFERS, kind: 'transfers' },
   }));
 
   protected readonly portfolio = lastGood(this.portfolioResource);

@@ -8,7 +8,9 @@ const entry = (description: string, change: string, sequence: number, createdAt 
   description,
   createdAt,
   orderId: null,
+  key: `k-${sequence}`,
   changes: [{ account: 'available', asset: 'PLN', change }],
+  postings: [],
 });
 
 describe('transfer model', () => {

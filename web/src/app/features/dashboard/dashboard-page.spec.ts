@@ -31,7 +31,8 @@ describe('DashboardPage', () => {
     backend.expectOne('/api/me/portfolio').flush(portfolio);
     backend.expectOne('/api/me/balances').flush(balances);
     const page: TestRequest = backend.expectOne((r) => r.url === '/api/me/history');
-    expect(page.request.params.get('limit')).toBe('50');
+    // Same przelewy z serwera: aktywny klient z wieloma zleceniami tez zobaczy ostatnie wplaty.
+    expect([page.request.params.get('limit'), page.request.params.get('kind')]).toEqual(['3', 'transfers']);
     page.flush(history);
   }
 
