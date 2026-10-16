@@ -37,6 +37,21 @@ public sealed class AccountTests(BrokerApi api)
     }
 
     [Fact]
+    public async Task History_filters_by_kind_and_shows_the_key_as_the_client_sent_it()
+    {
+        using var http = await Clients.RegisterAndLoginAsync(api);
+        await http.PostMoneyAsync("/api/me/deposits", "dep-1", "100");
+        await http.PostMoneyAsync("/api/me/withdrawals", "wd-1", "10");
+
+        var transfers = (await Get(http, "/api/me/history?kind=transfers")).GetProperty("items").EnumerateArray().ToList();
+        var trades = (await Get(http, "/api/me/history?kind=trades")).GetProperty("items");
+
+        // Klucz bez przedrostka z id klienta — taki, jaki klient wyslal w Idempotency-Key.
+        Assert.Equal(["wd-1", "dep-1"], transfers.Select(e => e.GetProperty("key").GetString()));
+        Assert.Equal(0, trades.GetArrayLength());
+    }
+
+    [Fact]
     public async Task Retried_request_is_booked_once()
     {
         using var http = await Clients.RegisterAndLoginAsync(api);

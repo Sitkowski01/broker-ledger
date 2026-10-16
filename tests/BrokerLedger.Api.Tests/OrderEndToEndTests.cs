@@ -40,6 +40,9 @@ public sealed partial class OrderEndToEndTests(BrokerApi api)
         // Dokument blokady w historii prowadzi do zlecenia, ktore go wywolalo.
         var block = (await http.GetFromJsonAsync<JsonElement>("/api/me/history")).GetProperty("items")[0];
         Assert.Equal(("block", Text(order, "id")), (Text(block, "description"), Text(block, "orderId")));
+        Assert.Equal($"order:{Text(order, "id")}:block", Text(block, "key"));
+        var blocks = (await http.GetFromJsonAsync<JsonElement>("/api/me/history?kind=blocks")).GetProperty("items");
+        Assert.Equal(["block"], blocks.EnumerateArray().Select(e => Text(e, "description")));
     }
 
     [Fact]

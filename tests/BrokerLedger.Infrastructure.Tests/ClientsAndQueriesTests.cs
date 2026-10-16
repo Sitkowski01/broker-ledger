@@ -77,6 +77,22 @@ public sealed class ClientsAndQueriesTests(PostgresFixture postgres) : IAsyncLif
     }
 
     [Fact]
+    public async Task History_filters_by_description_and_carries_the_key()
+    {
+        var store = _db.Store();
+        await store.PostAsync("dep", JournalEntries.Deposit(_client, Money.Pln(100m)));
+        await store.PostAsync("blk", JournalEntries.Block(_client, Pln, 40m));
+        await store.PostAsync("wd", JournalEntries.Withdrawal(_client, Money.Pln(10m)));
+
+        var transfers = await _db.Queries().ClientHistoryAsync(_client, limit: 10, descriptions: ["deposit", "withdrawal"]);
+        var page = await _db.Queries().ClientHistoryAsync(_client, limit: 1, before: transfers[0].Sequence, descriptions: ["deposit", "withdrawal"]);
+
+        Assert.Equal([("withdrawal", "wd"), ("deposit", "dep")], transfers.Select(h => (h.Description, h.Key)));
+        // Kursor dziala tez z filtrem: blokada miedzy nimi nie zajmuje miejsca na stronie.
+        Assert.Equal("dep", Assert.Single(page).Key);
+    }
+
+    [Fact]
     public async Task History_never_shows_another_clients_account()
     {
         var other = ClientId.New();

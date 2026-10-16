@@ -104,6 +104,17 @@ public sealed class ValidationTests(BrokerApi api)
     }
 
     [Fact]
+    public async Task Unknown_history_kind_lists_the_allowed_ones()
+    {
+        using var http = await Clients.RegisterAndLoginAsync(api);
+
+        var response = await http.GetAsync(new Uri("/api/me/history?kind=gifts", UriKind.Relative));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("kind must be one of: transfers, trades, blocks", Error(await response.JsonAsync(), "kind"));
+    }
+
+    [Fact]
     public async Task Too_large_page_says_the_limit()
     {
         using var http = await Clients.RegisterAndLoginAsync(api);

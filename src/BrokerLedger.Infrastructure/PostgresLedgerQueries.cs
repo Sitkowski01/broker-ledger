@@ -17,7 +17,8 @@ internal sealed class PostgresLedgerQueries(IDbContextFactory<LedgerDbContext> c
     }
 
     public async Task<IReadOnlyList<HistoryEntry>> ClientHistoryAsync(
-        ClientId client, int limit, long? before = null, CancellationToken cancellationToken = default)
+        ClientId client, int limit, long? before = null, IReadOnlyCollection<string>? descriptions = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
@@ -29,6 +30,10 @@ internal sealed class PostgresLedgerQueries(IDbContextFactory<LedgerDbContext> c
         if (before is { } cursor)
         {
             entries = entries.Where(e => e.Sequence < cursor);
+        }
+        if (descriptions is not null)
+        {
+            entries = entries.Where(e => descriptions.Contains(e.Description));
         }
         return await ToHistoryAsync(client, entries.OrderByDescending(e => e.Sequence).Take(limit), withBroker: true, cancellationToken);
     }
@@ -68,6 +73,6 @@ internal sealed class PostgresLedgerQueries(IDbContextFactory<LedgerDbContext> c
 
         return rows.Select(e => new HistoryEntry(e.Id, e.Sequence, e.Description, e.CreatedAt,
             e.Postings.Select(p => new Posting(AccountKey.ToAccountId(p.Account), p.Side, p.Amount)).ToList(),
-            Order.OfLedgerKey(e.IdempotencyKey))).ToList();
+            Order.OfLedgerKey(e.IdempotencyKey), e.IdempotencyKey)).ToList();
     }
 }

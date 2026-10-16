@@ -77,17 +77,25 @@ internal static class AccountEndpoints
     }
 
     private static async Task<IResult> HistoryAsync(
-        HttpContext http, ILedgerQueries queries, CancellationToken ct, int? limit = null, long? before = null)
+        HttpContext http, ILedgerQueries queries, CancellationToken ct, int? limit = null, long? before = null, string? kind = null)
     {
+        var errors = new Dictionary<string, string[]>();
         var size = limit ?? DefaultHistoryPage;
         if (size is < 1 or > ILedgerQueries.MaxHistoryPage)
         {
-            return Results.ValidationProblem(new Dictionary<string, string[]>
-            {
-                ["limit"] = [$"limit must be 1-{ILedgerQueries.MaxHistoryPage}"],
-            });
+            errors["limit"] = [$"limit must be 1-{ILedgerQueries.MaxHistoryPage}"];
         }
-        var entries = await queries.ClientHistoryAsync(http.User.ClientId(), size, before, ct);
+        IReadOnlyCollection<string>? descriptions = null;
+        if (kind is not null && !HistoryKinds.TryGetValue(kind, out descriptions))
+        {
+            errors["kind"] = [$"kind must be one of: {string.Join(", ", HistoryKinds.Keys)}"];
+        }
+        if (errors.Count > 0)
+        {
+            return Results.ValidationProblem(errors);
+        }
+        var client = http.User.ClientId();
+        var entries = await queries.ClientHistoryAsync(client, size, before, descriptions, ct);
         var items = entries.Select(e => new
         {
             id = e.Id,
@@ -95,6 +103,7 @@ internal static class AccountEndpoints
             description = e.Description,
             createdAt = e.CreatedAt,
             orderId = e.Order?.Value,
+            key = KeyFor(client, e.Key),
             // Zmiany sald klienta: "+" gdy saldo rosnie, "-" gdy maleje.
             changes = e.Postings.Where(p => p.Account.Client is not null).Select(p => new
             {
@@ -115,6 +124,21 @@ internal static class AccountEndpoints
         // Pelna strona = moze byc dalej; kursor to numer kolejny ostatniego dokumentu.
         return Results.Ok(new { items, nextBefore = items.Count == size ? items[^1].sequence : (long?)null });
     }
+
+    /// <summary>Rodzaje dokumentow do filtra historii — jak zakladki w ksiedze we froncie.</summary>
+    private static readonly Dictionary<string, IReadOnlyCollection<string>> HistoryKinds = new()
+    {
+        ["transfers"] = ["deposit", "withdrawal"],
+        ["trades"] = ["purchase", "sale"],
+        ["blocks"] = ["block", "release"],
+    };
+
+    /// <summary>
+    /// Klucz dokumentu do pokazania klientowi. Klucze przelewow maja przedrostek z id klienta (zeby klucze roznych
+    /// klientow sie nie zderzaly) — klient widzi swoj klucz tak, jak go wyslal.
+    /// </summary>
+    private static string? KeyFor(ClientId client, string? key) =>
+        key is not null && key.StartsWith($"{client}:", StringComparison.Ordinal) ? key[(client.ToString().Length + 1)..] : key;
 
     private static string AccountName(AccountType type) => type switch
     {
