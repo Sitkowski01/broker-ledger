@@ -1,7 +1,8 @@
 import { HistoryEntryDto, PostingDto } from '../../core/account/account-api';
+import { tradeTitle, unitsOf, unitsText } from '../../core/account/documents';
 import { warsawDay } from '../../core/format/dates';
 import { shortId } from '../../core/format/ids';
-import { formatCents, formatQuantity, parseCents } from '../../core/format/money';
+import { formatCents, formatQuantity } from '../../core/format/money';
 
 /**
  * Dokumenty ksiegi dla ludzi, bez Angulara. Kwoty liczymy na calkowitych groszach (zlotowki) i sztukach (akcje),
@@ -28,16 +29,6 @@ const ACCOUNTS: Readonly<Record<PostingDto['account'], string>> = {
 };
 
 const PLN = 'PLN';
-
-/** Kwota zapisu jako liczba calkowita: grosze dla zlotowek, sztuki dla akcji. */
-function unitsOf(p: Pick<PostingDto, 'asset' | 'amount'>): number {
-  return p.asset === PLN ? (parseCents(p.amount) ?? 0) : Number(p.amount) || 0;
-}
-
-/** "1 034,02" dla zlotowek, "4 szt." dla akcji. */
-export function unitsText(asset: string, units: number): string {
-  return asset === PLN ? formatCents(units) : `${formatQuantity(units)} szt.`;
-}
 
 export interface PostingRow {
   readonly mine: boolean;
@@ -135,19 +126,6 @@ function titleOf(e: HistoryEntryDto): string {
     default:
       return e.description;
   }
-}
-
-/** "CDR · 4 szt. × 248,40 zł" — cena z zapisu banku (wartosc bez prowizji) przez liczbe akcji. */
-function tradeTitle(postings: readonly PostingDto[]): string | null {
-  const shares = postings.find((p) => p.account === 'depository');
-  const bank = postings.find((p) => p.account === 'bank');
-  if (!shares || !bank) {
-    return null;
-  }
-  const quantity = unitsOf(shares);
-  const value = unitsOf(bank);
-  const price = quantity > 0 && value % quantity === 0 ? ` × ${formatCents(value / quantity)} zł` : '';
-  return `${shares.asset} · ${unitsText(shares.asset, quantity)}${price}`;
 }
 
 /** Czy dokument pasuje do wyszukiwania: numer zlecenia, klucz, walor albo opis. */
