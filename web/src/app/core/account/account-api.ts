@@ -75,10 +75,19 @@ export interface HistoryPageDto {
   readonly nextBefore: number | null;
 }
 
+/** Wynik rachunku w chwili: wartosc, wplacone netto i ich roznica (kwoty jak wszedzie — tekst). */
+export interface PerformancePointDto {
+  readonly at: string;
+  readonly value: string;
+  readonly invested: string;
+  readonly result: string;
+}
+
 export type TransferKind = 'deposit' | 'withdrawal';
 
 export const ACCOUNT_URLS = {
   portfolio: '/api/me/portfolio',
+  performance: '/api/me/performance',
   balances: '/api/me/balances',
   history: '/api/me/history',
 } as const;
