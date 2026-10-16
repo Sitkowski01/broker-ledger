@@ -19,6 +19,13 @@ public interface IMarketPrices
 
     /// <summary>Notowania wszystkich spolek z transakcjami, alfabetycznie, najwyzej <paramref name="limit"/>.</summary>
     Task<IReadOnlyList<Quote>> QuotesAsync(int limit, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Cena kazdej spolki w kazdej z chwil: ostatnia transakcja nie pozniejsza niz ta chwila. Lista rownolegla
+    /// do <paramref name="times"/>; null, gdy do tej chwili nie bylo zadnej transakcji.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, IReadOnlyList<decimal?>>> PricesAtAsync(
+        IReadOnlyCollection<string> symbols, IReadOnlyList<DateTimeOffset> times, CancellationToken cancellationToken = default);
 }
 
 /// <summary>

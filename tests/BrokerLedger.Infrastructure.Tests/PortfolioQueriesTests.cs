@@ -44,6 +44,50 @@ public sealed class PortfolioQueriesTests(PostgresFixture postgres) : IAsyncLife
         await Assert.ThrowsAsync<ArgumentNullException>(() => _db.Queries().ClientShareEntriesAsync(null!));
     }
 
+    [Fact]
+    public async Task All_entries_of_the_client_come_oldest_first_with_only_the_clients_postings()
+    {
+        var store = _db.Store();
+        await store.PostAsync("dep", JournalEntries.Deposit(_client, Money.Pln(1000m)));
+        await store.PostAsync("other", JournalEntries.Deposit(ClientId.New(), Money.Pln(5m)));
+        await store.PostAsync("block", JournalEntries.Block(_client, Pln, 503m));
+        await store.PostAsync("buy", JournalEntries.Purchase(_client, "CDR", 5, 500m, 3m));
+
+        var entries = await _db.Queries().ClientEntriesAsync(_client);
+
+        Assert.Equal(["deposit", "block", "purchase"], entries.Select(e => e.Description));
+        Assert.Equal([Posting.Credit(AccountId.Available(_client, Pln), 1000m)], entries[0].Postings);
+        await Assert.ThrowsAsync<ArgumentNullException>(() => _db.Queries().ClientEntriesAsync(null!));
+    }
+
+    [Fact]
+    public async Task Price_at_a_moment_is_the_last_trade_not_later_than_it()
+    {
+        var clock = new SettableClock(new DateTimeOffset(2026, 10, 16, 10, 0, 0, TimeSpan.Zero));
+        var inbox = _db.Inbox(clock);
+        await inbox.AddAsync(Trade("CDR", 1, 250m));
+        clock.Now = clock.Now.AddHours(1);
+        await inbox.AddAsync(Trade("CDR", 2, 260m));
+        await inbox.AddAsync(new ExchangeEvent.Cancelled("CDR", new EventPosition(1, 3), 9, 1, "REQUESTED"));
+        await inbox.AddAsync(Trade("PKO", 1, 48m));
+        var start = new DateTimeOffset(2026, 10, 16, 10, 0, 0, TimeSpan.Zero);
+
+        var prices = await _db.Prices().PricesAtAsync(["CDR", "PKO", "KGH", "CDR"], [start.AddMinutes(-1), start, start.AddMinutes(90)]);
+
+        Assert.Equal([null, 250m, 260m], prices["CDR"]);
+        Assert.Equal([null, null, 48m], prices["PKO"]);
+        Assert.Equal([null, null, null], prices["KGH"]);
+        Assert.Empty(await _db.Prices().PricesAtAsync([], [start]));
+        Assert.Equal([], (await _db.Prices().PricesAtAsync(["CDR"], []))["CDR"]);
+    }
+
+    private sealed class SettableClock(DateTimeOffset now) : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; } = now;
+
+        public override DateTimeOffset GetUtcNow() => Now;
+    }
+
     private static ExchangeEvent.Trade Trade(string symbol, long sequence, decimal price, long run = 1) =>
         new(symbol, new EventPosition(run, sequence), 4, 9, OrderSide.Buy, price, 1);
 

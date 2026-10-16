@@ -222,6 +222,10 @@ namespace BrokerLedger.Infrastructure.Migrations
                         .HasDatabaseName("ix_exchange_inbox_last_trade")
                         .HasFilter("type = 'TRADE'");
 
+                    b.HasIndex("Symbol", "ReceivedAt")
+                        .HasDatabaseName("ix_exchange_inbox_trade_time")
+                        .HasFilter("type = 'TRADE'");
+
                     b.HasIndex("RunId", "Symbol", "Sequence")
                         .IsUnique()
                         .HasDatabaseName("ix_exchange_inbox_run_id_symbol_sequence");

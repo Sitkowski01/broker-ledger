@@ -32,4 +32,7 @@ public interface ILedgerQueries
     /// (takze gotowkowych), bo z nich <see cref="Portfolio"/> liczy koszt i zysk.
     /// </summary>
     Task<IReadOnlyList<HistoryEntry>> ClientShareEntriesAsync(ClientId client, CancellationToken cancellationToken = default);
+
+    /// <summary>Wszystkie dokumenty klienta od najstarszych, tylko z jego zapisami — z nich <see cref="Performance"/> liczy wynik w czasie.</summary>
+    Task<IReadOnlyList<HistoryEntry>> ClientEntriesAsync(ClientId client, CancellationToken cancellationToken = default);
 }

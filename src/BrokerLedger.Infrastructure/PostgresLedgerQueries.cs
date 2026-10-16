@@ -48,6 +48,16 @@ internal sealed class PostgresLedgerQueries(IDbContextFactory<LedgerDbContext> c
         return await ToHistoryAsync(client, entries, withBroker: false, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<HistoryEntry>> ClientEntriesAsync(ClientId client, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(client);
+        await using var db = await contexts.CreateDbContextAsync(cancellationToken);
+        var entries = db.JournalEntries.AsNoTracking()
+            .Where(e => e.Postings.Any(p => p.Account.ClientId == client.Value))
+            .OrderBy(e => e.Sequence);
+        return await ToHistoryAsync(client, entries, withBroker: false, cancellationToken);
+    }
+
     /// <summary>
     /// Dokumenty z zapisami klienta i — gdy <paramref name="withBroker"/> — kontami brokera (bank, depozyt, prowizja),
     /// zeby klient widzial druga strone operacji. Konta innych klientow nigdy nie wychodza z bazy.
