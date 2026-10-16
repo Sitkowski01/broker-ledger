@@ -2,9 +2,9 @@ import { DestroyRef, inject, Injectable } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { catchError, EMPTY, filter, groupBy, mergeMap, switchMap } from 'rxjs';
 import { ClientEvent, ClientEvents } from '../events/client-events';
-import { formatPrice, formatQuantity } from '../format/money';
-import { Toast, Toasts } from '../notifications/toasts';
+import { Toasts } from '../notifications/toasts';
 import { OrderApi, OrderDto } from './order-api';
+import { orderToast } from './order-toast';
 
 type OrderEvent = Extract<ClientEvent, { kind: 'order' }>;
 
@@ -42,40 +42,4 @@ export class OrderNotifications {
       this.toasts.show(toast);
     }
   }
-}
-
-/** Co oglosic o zleceniu wzgledem tego, co juz bylo oglaszane; null, gdy nic nowego. */
-export function orderToast(o: OrderDto, filledBefore: number, statusBefore: string): Omit<Toast, 'id'> | null {
-  const side = o.side === 'buy' ? 'kupno' : 'sprzedaż';
-  const link = { path: '/zlecenia', label: 'Przebieg' };
-  if (o.status === statusBefore && o.filledQuantity === filledBefore) {
-    return null;
-  }
-  switch (o.status) {
-    case 'filled':
-      return {
-        tone: 'ok',
-        title: 'Zlecenie wykonane',
-        lines: [`${o.symbol} · ${side} ${formatQuantity(o.quantity)} szt.`, `Wartość ${formatPrice(o.filledValue)} zł · prowizja ${formatPrice(o.commission)} zł`],
-        link,
-      };
-    case 'rejected':
-      return { tone: 'bad', title: 'Zlecenie odrzucone', lines: [`${o.symbol} · ${side} ${formatQuantity(o.quantity)} szt.`, 'Blokada wróciła na rachunek'], link };
-    case 'cancelled':
-      return {
-        tone: 'info',
-        title: 'Zlecenie zdjęte z giełdy',
-        lines: [`${o.symbol} · wykonano ${formatQuantity(o.filledQuantity)} z ${formatQuantity(o.quantity)} szt.`, 'Reszta blokady wraca na rachunek'],
-        link,
-      };
-  }
-  if (o.filledQuantity > filledBefore) {
-    return {
-      tone: 'info',
-      title: 'Rozliczono transakcję',
-      lines: [`${o.symbol} · ${formatQuantity(o.filledQuantity - filledBefore)} szt. · zostało ${formatQuantity(o.quantity - o.filledQuantity)} szt.`],
-      link: { path: '/ksiega', label: 'Księga' },
-    };
-  }
-  return null;
 }

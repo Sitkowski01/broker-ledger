@@ -215,7 +215,8 @@ export class DemoBroker {
     // Prowizja od calego wykonania: minimum 3 zl raz, nie od kazdej transakcji (Commission.ForFilled).
     const feeTotal = Math.min(commissionCents(valueBefore + value), valueBefore + value);
     const fee = feeTotal - feeBefore;
-    const trade = order.filledQuantity + 1;
+    // Najwyzej dwie transakcje na zlecenie (patrz match): pierwsza polowa i reszta.
+    const trade = order.filledQuantity === 0 ? 1 : 2;
     const h = this.holdings.get(order.symbol) ?? { qty: 0, cost: 0, realized: 0 };
     if (order.side === 'buy') {
       this.ledger.purchase(order.symbol, quantity, value, fee, at, order.id, trade);

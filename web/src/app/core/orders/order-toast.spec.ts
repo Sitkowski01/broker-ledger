@@ -1,4 +1,4 @@
-import { orderToast } from './order-notifications';
+import { orderToast } from './order-toast';
 import { OrderDto } from './order-api';
 
 const order = (o: Partial<OrderDto>): OrderDto => ({
