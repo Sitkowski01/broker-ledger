@@ -1,0 +1,104 @@
+:host {
+  display: block;
+}
+
+.body {
+  padding: 18px 20px 20px;
+}
+
+.t {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  border-top: 2px solid var(--text);
+}
+
+.side {
+  min-width: 0;
+  padding-top: 8px;
+}
+
+.wn {
+  padding-right: 12px;
+  border-right: 2px solid var(--text);
+}
+
+.ma {
+  padding-left: 12px;
+}
+
+h3 {
+  padding-bottom: 6px;
+  color: var(--text);
+  font-weight: 700;
+  text-align: center;
+}
+
+.line {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.what {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+
+.opening,
+.opening .what {
+  color: var(--muted);
+}
+
+.closing,
+.closing .what {
+  color: var(--bull);
+  font-weight: 700;
+}
+
+.totals {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-strong);
+  font-weight: 700;
+}
+
+.totals .line:first-child {
+  padding-right: 12px;
+}
+
+.totals .line:last-child {
+  padding-left: 12px;
+}
+
+.note {
+  margin-top: 14px;
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+.close {
+  color: var(--bull);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* Na telefonie kolumny sa waskie: opis nad kwota zamiast obcinania. */
+@media (max-width: 760px) {
+  .side .line {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .side .what {
+    white-space: normal;
+  }
+}
