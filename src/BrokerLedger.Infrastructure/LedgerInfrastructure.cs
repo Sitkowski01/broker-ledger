@@ -21,6 +21,11 @@ public static class LedgerInfrastructure
         services.AddSingleton<IExchangeInbox, PostgresExchangeInbox>();
         services.AddSingleton<PostgresDeadLetters>();
         services.AddSingleton<IMarketPrices, PostgresMarketPrices>();
+        // Jedna instancja: nasluch w tle (hosted service) i subskrypcje (IClientEvents) dziela liste subskrybentow.
+        services.AddSingleton(new ClientEventsSettings(connectionString, TimeSpan.FromSeconds(2)));
+        services.AddSingleton<PostgresClientEvents>();
+        services.AddSingleton<IClientEvents>(provider => provider.GetRequiredService<PostgresClientEvents>());
+        services.AddHostedService(provider => provider.GetRequiredService<PostgresClientEvents>());
         return services;
     }
 
