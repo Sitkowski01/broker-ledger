@@ -13,7 +13,43 @@ internal static class PortfolioEndpoints
     {
         app.MapGroup("/api/me").RequireAuthorization().RequireRateLimiting(RateLimits.Client)
             .MapGet("/portfolio", PortfolioAsync);
+        app.MapGroup("/api/me").RequireAuthorization().RequireRateLimiting(RateLimits.Client)
+            .MapGet("/performance", PerformanceAsync);
         return app;
+    }
+
+    /// <summary>Zakresy wykresu wyniku: tydzien i miesiac, jak na Pulpicie.</summary>
+    private static readonly int[] PerformanceDays = [7, 30];
+
+    /// <summary>
+    /// <c>GET /api/me/performance?days=7|30</c> — wynik rachunku bez wplat i wyplat, punkt na koniec kazdego dnia
+    /// i "teraz". Liczony z ksiegi i cen transakcji ze skrzynki, wiec nie ma osobnej tabeli, ktora moglaby sie rozjechac.
+    /// </summary>
+    private static async Task<IResult> PerformanceAsync(
+        HttpContext http, ILedgerQueries queries, IMarketPrices prices, TimeProvider clock, CancellationToken ct, int? days = null)
+    {
+        var range = days ?? 30;
+        if (!PerformanceDays.Contains(range))
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]> { ["days"] = ["days must be 7 or 30"] });
+        }
+        var entries = await queries.ClientEntriesAsync(http.User.ClientId(), ct);
+        if (entries.Count == 0)
+        {
+            return Results.Ok(new { points = Array.Empty<object>() });
+        }
+        var now = clock.GetUtcNow();
+        var opened = entries.Min(e => e.CreatedAt);
+        var from = opened > now.AddDays(-range) ? opened : now.AddDays(-range);
+        var times = Performance.DailyTimes(from, now, Performance.ExchangeZone);
+        var symbols = entries.SelectMany(e => e.Postings).Select(p => p.Account.Asset)
+            .Where(a => a.Kind == AssetKind.Shares).Select(a => a.Code).Distinct().ToList();
+        var priceTable = await prices.PricesAtAsync(symbols, times, ct);
+        var points = Performance.Sample(entries, times, (symbol, i) => priceTable[symbol][i]);
+        return Results.Ok(new
+        {
+            points = points.Select(p => new { at = p.At, value = Pl(p.Value), invested = Pl(p.Invested), result = Pl(p.Result) }),
+        });
     }
 
     private static async Task<IResult> PortfolioAsync(HttpContext http, ILedgerQueries queries, IMarketPrices prices,
