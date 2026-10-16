@@ -1,0 +1,66 @@
+<bl-page-header kicker="Dokumenty Wn / Ma" title="Księga">
+  <p class="lead">
+    Każda operacja to dokument z zapisami Wn (debet) i Ma (kredyt). Saldo nie jest polem w bazie — wynika z sumy zapisów,
+    więc zawsze da się je odtworzyć.
+  </p>
+</bl-page-header>
+
+<div class="row">
+  <div class="docs">
+    <div class="tools">
+      <label class="field search">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+        <span class="sr-only">Szukaj dokumentu</span>
+        <input type="search" placeholder="Zlecenie, walor albo klucz" autocomplete="off" [formControl]="search" />
+      </label>
+      <div class="filters" role="group" aria-label="Rodzaj dokumentu">
+        @for (f of filters; track f.label) {
+          <button type="button" class="chip" [attr.aria-pressed]="kind() === f.key" (click)="setKind(f.key)">{{ f.label }}</button>
+        }
+      </div>
+    </div>
+
+    @if (error(); as message) {
+      <div class="alert error" role="alert">
+        <span>{{ message }}</span>
+        <button type="button" class="ghost" (click)="retry()">Spróbuj ponownie</button>
+      </div>
+    }
+
+    @for (day of days(); track day.label; let first = $first) {
+      <div class="day">
+        <h2 class="micro">{{ day.label }}</h2>
+        <span class="line" aria-hidden="true"></span>
+        @if (first) {
+          <button type="button" class="chip" (click)="toggleAll()">{{ allOpen() ? 'Zwiń wszystkie' : 'Rozwiń wszystkie' }}</button>
+        }
+      </div>
+      @for (doc of day.docs; track doc.sequence) {
+        <bl-ledger-doc [doc]="doc" [time]="timeOf(doc.createdAt)" [open]="isOpen(doc.sequence)" (toggle)="toggle(doc.sequence)" />
+      }
+    } @empty {
+      @if (!loading() && !error()) {
+        <p class="empty panel">
+          @if (query()) {
+            Żaden wczytany dokument nie pasuje do „{{ query() }}”.
+            @if (next() !== null) {
+              Wczytaj starsze, żeby szukać dalej.
+            }
+          } @else {
+            Brak dokumentów tego rodzaju. Pierwszy powstanie przy wpłacie albo zleceniu.
+          }
+        </p>
+      }
+    }
+
+    @if (loading()) {
+      <p class="panel loading" aria-busy="true">Wczytywanie dokumentów…</p>
+    } @else if (next() !== null) {
+      <button type="button" class="ghost more" (click)="loadMore()">Wczytaj starsze dokumenty</button>
+    }
+  </div>
+
+  <aside class="side">
+    <bl-ledger-guide />
+  </aside>
+</div>
