@@ -31,3 +31,16 @@ export function longDate(now: Date): string {
   const p = parts(WEEKDAY, now);
   return `${p['weekday']} ${p['day']}.${p['month']}.${p['year']}`;
 }
+
+/** Dzien w Warszawie jako "16.10.2026" — do grupowania po dniach i porownan "dzis". */
+export function warsawDay(date: Date): string {
+  const p = parts(DAY, date);
+  return `${p['day']}.${p['month']}.${p['year']}`;
+}
+
+const TIME = new Intl.DateTimeFormat('pl-PL', { timeZone: WARSAW, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+/** Godzina z sekundami w Warszawie: "19:42:07" — dokumenty z tej samej minuty da sie rozroznic. */
+export function timeOf(iso: string): string {
+  return TIME.format(new Date(iso));
+}
