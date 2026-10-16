@@ -1,4 +1,4 @@
-import { BalanceDto, PortfolioDto } from '../../core/account/account-api';
+import { PortfolioDto } from '../../core/account/account-api';
 import { formatCents, MINUS, parseCents } from '../../core/format/money';
 
 /**
@@ -13,12 +13,6 @@ export interface Slice {
   readonly percent: string;
   /** Szerokosc paska w CSS, np. "72.3%". */
   readonly width: string;
-}
-
-/** Wolne i zablokowane zlotowki z GET /api/me/balances (brak wiersza = zero). */
-export function cashOf(balances: readonly BalanceDto[]): { available: number; blocked: number } {
-  const pln = balances.find((b) => b.asset === 'PLN');
-  return { available: parseCents(pln?.available ?? '0') ?? 0, blocked: parseCents(pln?.blocked ?? '0') ?? 0 };
 }
 
 /** Udzial czesci w calosci z dokladnoscia do promila: "72,3%" i szerokosc paska "72.3%". */

@@ -1,7 +1,6 @@
 import fc from 'fast-check';
 import {
   accountStructure,
-  cashOf,
   currenciesOf,
   formatBasisPoints,
   returnOn,
@@ -13,12 +12,6 @@ import {
 import { SAMPLE_PORTFOLIO as portfolio } from './testing';
 
 describe('account model', () => {
-  it('reads free and blocked zlotys, treating a missing row as zero', () => {
-    expect(cashOf([{ asset: 'CDR', kind: 'Shares', available: '6', blocked: '0' }, { asset: 'PLN', kind: 'Cash', available: '8214.36', blocked: '3543.77' }]))
-      .toEqual({ available: 821436, blocked: 354377 });
-    expect(cashOf([])).toEqual({ available: 0, blocked: 0 });
-  });
-
   it('splits the account into shares, cash and blocked cash to a tenth of a percent', () => {
     expect(accountStructure(3068840, 821436, 354377)).toEqual([
       { key: 'shares', label: 'Akcje', value: '30 688,40', percent: '72,3%', width: '72.3%' },

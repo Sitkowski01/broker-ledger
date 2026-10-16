@@ -1,10 +1,11 @@
-import { httpResource, HttpResourceRef } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, linkedSignal, signal, Signal } from '@angular/core';
+import { httpResource } from '@angular/common/http';
+import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { ACCOUNT_URLS, BalanceDto, HistoryPageDto, PortfolioDto } from '../../core/account/account-api';
+import { cashOf } from '../../core/account/balances';
 import { toApiError } from '../../core/api/api-error';
+import { lastGood, loadErrorOf } from '../../core/api/last-good';
 import { longDate } from '../../core/format/dates';
 import { PageHeader } from '../../shared/page-header';
-import { cashOf } from './account-model';
 import { AccountValue } from './account-value';
 import { PortfolioTable } from './portfolio-table';
 import { TransferPanel } from './transfer-panel';
@@ -14,18 +15,6 @@ import { recentTransfers } from './transfer-model';
 const HISTORY_WINDOW = 50;
 /** Co ile odswiezamy "dzis" w naglowku i przy godzinach — Pulpit bywa otwarty przez noc. */
 export const CLOCK_TICK_MS = 60_000;
-
-/**
- * Ostatnia udana odpowiedz zasobu. Nieudane odswiezenie nie kasuje tego, co klient juz widzi —
- * inaczej po przelewie znikalby panel razem z potwierdzeniem i kluczem idempotencji.
- * (value() zasobu w stanie bledu rzuca wyjatkiem, wiec czytamy go tylko przez hasValue().)
- */
-function lastGood<T>(resource: HttpResourceRef<T | undefined>): Signal<T | undefined> {
-  return linkedSignal<T | undefined, T | undefined>({
-    source: () => (resource.hasValue() ? resource.value() : undefined),
-    computation: (value, previous) => value ?? previous?.value,
-  });
-}
 
 /** Pulpit: wartosc rachunku (takze w walutach NBP), przelewy i otwarte pozycje. */
 @Component({
@@ -60,8 +49,7 @@ export class DashboardPage {
     if (!error) {
       return null;
     }
-    // Resource opakowuje odpowiedz HTTP, ktora nie jest Error, w ResourceWrappedError z polem cause.
-    const api = toApiError((error as { cause?: unknown }).cause ?? error);
+    const api = toApiError(loadErrorOf(error));
     return 'message' in api ? api.message : 'Nie udało się wczytać rachunku.';
   });
 
