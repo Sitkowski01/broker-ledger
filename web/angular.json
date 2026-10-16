@@ -41,6 +41,9 @@
               "optimization": false,
               "extractLicenses": false,
               "sourceMap": true
+            },
+            "demo": {
+              "fileReplacements": [{ "replace": "src/app/demo/demo-mode.ts", "with": "src/app/demo/demo-mode.demo.ts" }]
             }
           },
           "defaultConfiguration": "production"
@@ -54,6 +57,9 @@
             },
             "development": {
               "buildTarget": "broker-web:build:development"
+            },
+            "demo": {
+              "buildTarget": "broker-web:build:development,demo"
             }
           },
           "defaultConfiguration": "development"

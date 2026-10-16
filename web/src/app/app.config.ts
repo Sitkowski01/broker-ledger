@@ -3,11 +3,16 @@ import { ApplicationConfig, provideBrowserGlobalErrorListeners } from '@angular/
 import { provideRouter, withComponentInputBinding } from '@angular/router';
 import { routes } from './app.routes';
 import { authInterceptor } from './core/auth/auth.interceptor';
+import { ClientEvents } from './core/events/client-events';
+import { DemoClientEvents, demoInterceptor } from './demo/demo-backend';
+import { DEMO } from './demo/demo-mode';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideRouter(routes, withComponentInputBinding()),
-    provideHttpClient(withFetch(), withInterceptors([authInterceptor])),
+    // W trybie demo ostatni interceptor odpowiada zamiast serwera — reszta aplikacji o tym nie wie.
+    provideHttpClient(withFetch(), withInterceptors(DEMO ? [authInterceptor, demoInterceptor] : [authInterceptor])),
+    ...(DEMO ? [{ provide: ClientEvents, useExisting: DemoClientEvents }] : []),
   ],
 };
