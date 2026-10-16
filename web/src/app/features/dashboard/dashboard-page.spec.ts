@@ -1,4 +1,4 @@
-import { provideHttpClient } from '@angular/common/http';
+import { HttpRequest, provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting, TestRequest } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
@@ -25,15 +25,34 @@ describe('DashboardPage', () => {
     return { fixture, el, stable: () => fixture.whenStable() };
   }
 
-  /** Odpowiada na trzy zapytania Pulpitu; brak odpowiedzi = zapytanie dalej wisi. */
+  /** Ostatnie przelewy: historia zawezona do przelewow. */
+  const transfers = (r: HttpRequest<unknown>) => r.url === '/api/me/history' && r.params.get('kind') === 'transfers';
+
+  /**
+   * Zapytania pobocznych paneli: dokumenty do Rozliczen i wykres wyniku (ten dopiero, gdy jest panel wartosci).
+   * Bez odpowiedzi whenStable czekaloby na nie w nieskonczonosc.
+   */
+  function extras() {
+    // Kilka taktow: najpierw pojawia sie panel wartosci, potem jego wykres wysyla wlasne zapytanie.
+    for (let i = 0; i < 3; i++) {
+      TestBed.tick();
+      backend.match((r) => r.url === '/api/me/history' && !r.params.has('kind')).forEach((r) => r.flush({ items: [], nextBefore: null }));
+      backend.match((r) => r.url === '/api/me/performance').forEach((r) => r.flush({ points: [] }));
+    }
+    // Odpowiedzi trzeba jeszcze przetworzyc (zasoby i widok), zanim test zacznie czekac na whenStable.
+    TestBed.tick();
+  }
+
+  /** Odpowiada na zapytania Pulpitu; brak odpowiedzi = zapytanie dalej wisi. */
   function respond(portfolio: PortfolioDto = SAMPLE_PORTFOLIO) {
     TestBed.tick();
     backend.expectOne('/api/me/portfolio').flush(portfolio);
     backend.expectOne('/api/me/balances').flush(balances);
-    const page: TestRequest = backend.expectOne((r) => r.url === '/api/me/history');
+    const page: TestRequest = backend.expectOne(transfers);
     // Same przelewy z serwera: aktywny klient z wieloma zleceniami tez zobaczy ostatnie wplaty.
     expect([page.request.params.get('limit'), page.request.params.get('kind')]).toEqual(['3', 'transfers']);
     page.flush(history);
+    extras();
   }
 
   afterEach(() => backend.verify());
@@ -86,7 +105,8 @@ describe('DashboardPage', () => {
     TestBed.tick();
     backend.expectOne('/api/me/portfolio').flush(null, { status: 503, statusText: 'Unavailable' });
     backend.expectOne('/api/me/balances').flush(balances);
-    backend.expectOne((r) => r.url === '/api/me/history').flush(history);
+    backend.expectOne(transfers).flush(history);
+    extras();
     await page.stable();
 
     const alert = page.el.querySelector('[role="alert"]')!;
@@ -105,7 +125,8 @@ describe('DashboardPage', () => {
     TestBed.tick();
     backend.expectOne('/api/me/portfolio').flush(SAMPLE_PORTFOLIO);
     backend.expectOne('/api/me/balances').flush(balances);
-    backend.expectOne((r) => r.url === '/api/me/history').flush(null, { status: 500, statusText: 'Server Error' });
+    backend.expectOne(transfers).flush(null, { status: 500, statusText: 'Server Error' });
+    extras();
     await page.stable();
 
     expect(page.el.querySelector('bl-account-value')).not.toBeNull();
@@ -118,7 +139,8 @@ describe('DashboardPage', () => {
     TestBed.tick();
     backend.expectOne('/api/me/portfolio').flush(null, { status: 0, statusText: 'Unknown Error' });
     backend.expectOne('/api/me/balances').flush(balances);
-    backend.expectOne((r) => r.url === '/api/me/history').flush(history);
+    backend.expectOne(transfers).flush(history);
+    extras();
     await page.stable();
 
     expect(page.el.querySelector('[role="alert"]')?.textContent).toContain('Brak połączenia z serwerem.');
@@ -135,7 +157,8 @@ describe('DashboardPage', () => {
     TestBed.tick();
     backend.expectOne('/api/me/portfolio').flush(null, { status: 429, statusText: 'Too Many Requests' });
     backend.expectOne('/api/me/balances').flush(balances);
-    backend.expectOne((r) => r.url === '/api/me/history').flush(history);
+    backend.expectOne(transfers).flush(history);
+    extras();
     await page.stable();
 
     expect(page.el.querySelector('[role="alert"]')?.textContent).toContain('Za dużo prób');

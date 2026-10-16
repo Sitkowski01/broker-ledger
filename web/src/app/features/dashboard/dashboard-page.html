@@ -16,10 +16,15 @@
 
 @if (ready()) {
   <div class="row">
-    <bl-account-value class="wide" [portfolio]="portfolio()!" [available]="cash().available" [blocked]="cash().blocked" />
+    <bl-account-value class="wide" [portfolio]="portfolio()!" [available]="cash().available" [blocked]="cash().blocked">
+      <bl-result-chart [points]="performance()?.points" [now]="now()" [(days)]="days" />
+    </bl-account-value>
     <bl-transfer-panel class="narrow" [available]="cash().available" [recent]="recent()" (posted)="reload()" />
   </div>
-  <bl-portfolio-table [portfolio]="portfolio()!" [now]="now()" />
+  <div class="row">
+    <bl-portfolio-table class="wide" [portfolio]="portfolio()!" [now]="now()" />
+    <bl-settlement-feed class="narrow" [entries]="feed()?.items ?? []" />
+  </div>
 } @else if (!loadError()) {
   <section class="panel loading" aria-busy="true" aria-label="Wczytywanie rachunku">
     <div class="bar"><h2>Wartość rachunku</h2><span class="meta">Wczytywanie…</span></div>
