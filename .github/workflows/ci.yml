@@ -44,6 +44,67 @@ jobs:
         run: npx ng build
       - name: Testy jednostkowe (Vitest)
         run: npx ng test --watch=false
+      - name: Build trybu demo (front bez serwera)
+        run: npm run build:demo
+      - name: Przegladarka do testow e2e
+        run: npx playwright install --with-deps chromium
+      - name: Testy e2e w przegladarce (Playwright, tryb demo)
+        run: npx playwright test --project=demo --project=demo-phone
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: web/playwright-report
+
+  e2e-system:
+    # Caly system z docker compose (broker, front w nginx, gielda Parkiet z GHCR, Kafka, bazy) i Playwright na nim.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: System w kontenerach
+        run: |
+          docker compose --profile app up -d --build
+          timeout 180 bash -c 'until curl -sf localhost:8091/health; do sleep 3; done'
+          timeout 120 bash -c 'until curl -sf localhost:8093 > /dev/null; do sleep 2; done'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Testy e2e na calym systemie (Playwright)
+        working-directory: web
+        env:
+          E2E_LIVE: "1"
+          E2E_LIVE_URL: http://localhost:8093
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+          npx playwright test --project=live
+      - name: Logi, gdy cos padlo
+        if: failure()
+        run: docker compose --profile app logs --tail 200
+
+  mutation-web:
+    # Logika frontu (rachunki, modele ekranow, symulator demo) na zwyklym Vitest — bez kompilatora Angulara.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - name: Mutation testing logiki frontu (Stryker + Vitest)
+        run: npm run stryker
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stryker-web
+          path: web/reports/mutation
 
   mutation-infrastructure:
     # Osobno, bo kazdy przebieg testow stawia kontener PostgreSQL — trwa kilka minut.
@@ -80,3 +141,33 @@ jobs:
         with:
           name: stryker-api
           path: StrykerOutput/**/reports
+
+  images:
+    # Obrazy do GHCR tylko z main i tylko po zielonych testach i e2e calego systemu.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test, web, e2e-system]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/sitkowski01/broker-ledger-api:latest
+            ghcr.io/sitkowski01/broker-ledger-api:${{ github.sha }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: web
+          push: true
+          tags: |
+            ghcr.io/sitkowski01/broker-ledger-web:latest
+            ghcr.io/sitkowski01/broker-ledger-web:${{ github.sha }}
