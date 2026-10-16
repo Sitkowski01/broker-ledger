@@ -20,6 +20,7 @@ import { ctaText, maxBuyQuantity, parseQuantity, summaryRows, ticketErrors, Tick
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [ReactiveFormsModule],
   templateUrl: './order-ticket.html',
+  styleUrl: './order-ticket.css',
   host: {
     class: 'panel',
     role: 'region',
