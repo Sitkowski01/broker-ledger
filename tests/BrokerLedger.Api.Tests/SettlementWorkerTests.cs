@@ -125,6 +125,8 @@ public class SettlementWorkerTests
             .AddSingleton<ILedgerStore>(new NoLedger())
             .AddSingleton(Commission.Standard)
             .AddTransient<TradeSettlement>()
+            .AddMetrics()
+            .AddSingleton<BrokerMetrics>()
             .BuildServiceProvider();
         var options = Options.Create(new SettlementOptions { BatchSize = batch, Enabled = enabled, Interval = interval ?? TimeSpan.FromSeconds(1) });
         return new SettlementWorker(services.GetRequiredService<IServiceScopeFactory>(), options, TimeProvider.System,

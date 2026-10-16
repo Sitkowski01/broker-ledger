@@ -67,6 +67,7 @@ internal sealed partial class SettlementWorker(
         await using var scope = scopes.CreateAsyncScope();
         var settlement = scope.ServiceProvider.GetRequiredService<TradeSettlement>();
         var pass = await settlement.SettlePendingAsync(options.Value.BatchSize, cancellationToken);
+        scope.ServiceProvider.GetRequiredService<BrokerMetrics>().Settled(pass.Settled);
         foreach (var (exchangeEvent, error) in pass.Failures)
         {
             var failure = $"{exchangeEvent.Position} {error.GetType().Name}: {error.Message}";

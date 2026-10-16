@@ -46,6 +46,19 @@ public sealed partial class OrderEndToEndTests(BrokerApi api)
     }
 
     [Fact]
+    public async Task Placed_orders_show_up_in_the_metrics()
+    {
+        using var http = await FundedClientAsync();
+
+        await PlaceAsync(http, "m-1", Buy());
+        var metrics = await http.GetStringAsync(new Uri("/metrics", UriKind.Relative));
+
+        // Format Prometheusa: licznik z etykietami strony i stanu po odpowiedzi gieldy.
+        Assert.Matches("""broker_orders_total{[^}]*side="buy"[^}]*status="accepted"[^}]*} [1-9]""", metrics);
+        Assert.Contains("http_server_request_duration_seconds", metrics, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Not_enough_money_is_422_and_never_reaches_the_exchange()
     {
         using var http = await FundedClientAsync(deposit: "100");

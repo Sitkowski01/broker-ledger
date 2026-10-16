@@ -28,11 +28,29 @@ internal static class EventEndpoints
     }
 
     private static ServerSentEventsResult<object> Stream(
-        HttpContext http, IClientEvents events, IOptions<EventsOptions> options, CancellationToken ct)
+        HttpContext http, IClientEvents events, IOptions<EventsOptions> options, BrokerMetrics metrics, CancellationToken ct)
     {
         // Bez buforowania po drodze (np. nginx), inaczej sygnaly przychodzilyby paczkami.
         http.Response.Headers["X-Accel-Buffering"] = "no";
-        return TypedResults.ServerSentEvents(ItemsAsync(events.SubscribeAsync(http.User.ClientId(), ct), options.Value.Heartbeat, ct));
+        return TypedResults.ServerSentEvents(CountedAsync(ItemsAsync(events.SubscribeAsync(http.User.ClientId(), ct), options.Value.Heartbeat, ct), metrics, ct));
+    }
+
+    /// <summary>Strumien liczony w metryce otwartych strumieni — od pierwszego zdarzenia do rozlaczenia.</summary>
+    private static async IAsyncEnumerable<SseItem<object>> CountedAsync(
+        IAsyncEnumerable<SseItem<object>> items, BrokerMetrics metrics, [EnumeratorCancellation] CancellationToken ct)
+    {
+        metrics.StreamOpened();
+        try
+        {
+            await foreach (var item in items.WithCancellation(ct))
+            {
+                yield return item;
+            }
+        }
+        finally
+        {
+            metrics.StreamClosed();
+        }
     }
 
     /// <summary>Najpierw "ready" (klient wie, ze nasluchuje), potem zdarzenia, a w ciszy co jakis czas "ping".</summary>

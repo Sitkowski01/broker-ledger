@@ -26,7 +26,7 @@ internal static class OrderEndpoints
 
     private static async Task<IResult> PlaceAsync(
         PlaceOrderRequest body, [FromHeader(Name = AccountEndpoints.IdempotencyHeader)] string? key,
-        HttpContext http, OrderSaga saga, IOrderRepository orders, Commission commission, CancellationToken ct)
+        HttpContext http, OrderSaga saga, IOrderRepository orders, Commission commission, BrokerMetrics metrics, CancellationToken ct)
     {
         var errors = new Dictionary<string, string[]>();
         if (!AccountEndpoints.IsValidKey(key))
@@ -69,6 +69,7 @@ internal static class OrderEndpoints
             // Reconciler zdazyl sie nim zajac — pokazujemy stan, w jakim jest teraz.
             order = (await orders.GetAsync(stored.Id, ct))!;
         }
+        metrics.OrderPlaced(order.Side.ToString().ToLowerInvariant(), order.Status.ToString().ToLowerInvariant());
         return order.Status switch
         {
             OrderStatus.Rejected => Results.Json(OrderView.Of(order), statusCode: StatusCodes.Status422UnprocessableEntity),

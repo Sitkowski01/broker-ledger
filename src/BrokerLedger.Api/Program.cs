@@ -10,6 +10,7 @@ using BrokerLedger.Api.Portfolios;
 using BrokerLedger.Infrastructure;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Options;
+using OpenTelemetry.Metrics;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,6 +21,12 @@ if (string.IsNullOrWhiteSpace(connectionString))
 }
 builder.Services.AddLedgerInfrastructure(connectionString);
 builder.Services.AddApiDocs();
+builder.Services.AddSingleton<BrokerMetrics>();
+// Metryki HTTP i biznesowe w formacie Prometheusa (/metrics) — jak Actuator w gieldzie Parkiet.
+builder.Services.AddOpenTelemetry().WithMetrics(metrics => metrics
+    .AddAspNetCoreInstrumentation()
+    .AddMeter(BrokerMetrics.MeterName)
+    .AddPrometheusExporter());
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<LedgerExceptionHandler>();
 builder.Services.AddBrokerAuth(builder.Configuration);
@@ -59,6 +66,7 @@ app.UseRateLimiter();
 
 app.MapHealthChecks("/health");
 app.MapApiDocs();
+app.MapPrometheusScrapingEndpoint("/metrics");
 app.MapAuthEndpoints();
 app.MapAccountEndpoints();
 app.MapOrderEndpoints();

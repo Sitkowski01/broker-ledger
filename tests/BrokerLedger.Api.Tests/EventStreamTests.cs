@@ -57,6 +57,9 @@ public sealed class EventStreamTests(BrokerApi api)
 
         Assert.Equal("ready", (await NextEventAsync(reader, cts.Token)).Event);
         Assert.Equal("ping", (await NextEventAsync(reader, cts.Token)).Event);
+        // Otwarty strumien widac w metrykach (licznik w gore przy polaczeniu, w dol przy rozlaczeniu).
+        var metrics = await http.GetStringAsync(new Uri("/metrics", UriKind.Relative), cts.Token);
+        Assert.Matches("""broker_event_streams\{[^}]*\} [1-9]""", metrics);
     }
 
     [Fact]
