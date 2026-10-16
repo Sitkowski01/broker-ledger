@@ -42,6 +42,7 @@ import { orderTitle, sagaNote, sagaSteps } from './order-model';
       <p class="foot">{{ note }}</p>
     }
   `,
+  styleUrl: './order-saga.css',
 })
 export class OrderSaga {
   readonly order = input.required<OrderDto>();

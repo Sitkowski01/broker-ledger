@@ -1,0 +1,176 @@
+:host {
+  display: block;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: rgba(3, 7, 18, 0.5);
+}
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+h3 {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.ids {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin: 0;
+  padding: 20px 18px 22px;
+  list-style: none;
+}
+
+li {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.node-row {
+  display: flex;
+  align-items: center;
+}
+
+.node {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--line-strong);
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ln {
+  flex: 1;
+  height: 2px;
+  margin: 0 8px;
+  border-radius: 1px;
+  background: var(--line);
+}
+
+li:last-child .ln {
+  visibility: hidden;
+}
+
+.txt {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-right: 12px;
+}
+
+.name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.note {
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+.done .node {
+  border-color: var(--bull);
+  background: var(--bull);
+  color: var(--bg);
+}
+
+.done .ln {
+  background: var(--bull);
+}
+
+.done .name {
+  color: var(--text);
+}
+
+.now .node {
+  border-color: var(--warn);
+  background: var(--warn-soft);
+  color: var(--warn-text);
+  animation: ring 1.8s ease-out infinite;
+}
+
+.now .name {
+  color: var(--warn-text);
+}
+
+.fail .node {
+  border-color: var(--bear);
+  background: var(--bear);
+  color: #fff;
+}
+
+.fail .name {
+  color: var(--bear-text);
+}
+
+@keyframes ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(245, 183, 74, 0.5);
+  }
+  80%,
+  100% {
+    box-shadow: 0 0 0 8px rgba(245, 183, 74, 0);
+  }
+}
+
+.foot {
+  padding: 12px 18px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .now .node {
+    animation: none;
+  }
+}
+
+/* Na telefonie os pionowa: wezel i linia po lewej, opis obok. */
+@media (max-width: 760px) {
+  .steps {
+    grid-template-columns: 1fr;
+    padding: 16px 18px;
+  }
+
+  li {
+    flex-direction: row;
+    gap: 14px;
+    min-height: 56px;
+  }
+
+  .node-row {
+    flex-direction: column;
+  }
+
+  .ln {
+    width: 2px;
+    height: auto;
+    margin: 4px 0;
+  }
+
+  .txt {
+    padding: 3px 0 14px;
+  }
+}
