@@ -13,6 +13,9 @@
         <h2 id="form-title" class="display">{{ mode() === 'login' ? 'Witaj ponownie' : 'Załóż konto' }}</h2>
         <p class="hint">{{ mode() === 'login' ? 'Zaloguj się do swojego rachunku.' : 'Dostajesz pusty rachunek w PLN — zasil go wpłatą.' }}</p>
       </div>
+      @if (demo) {
+        <p class="alert warn" role="note">Tryb demo: broker działa w tej karcie przeglądarki, bez serwera. Wpisz dowolny e-mail i hasło (min. 8 znaków).</p>
+      }
       @if (expired) {
         <p class="alert warn" role="status">Sesja wygasła. Zaloguj się ponownie, a wrócisz do ostatniego ekranu.</p>
       }

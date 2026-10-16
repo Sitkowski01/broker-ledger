@@ -30,11 +30,14 @@
 </header>
 
 <main id="tresc">
+  <bl-connection-banner />
   <router-outlet />
 </main>
 
 <footer>
   <div class="inner">
-    <span class="credit">Projekt demonstracyjny</span>
+    <span class="credit">{{ demo ? 'Tryb demo · dane tylko w tej karcie przeglądarki' : 'Projekt demonstracyjny' }}</span>
   </div>
 </footer>
+
+<bl-toast-stack />

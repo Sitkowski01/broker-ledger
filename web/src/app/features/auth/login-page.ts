@@ -5,6 +5,7 @@ import { ApiError, toApiError } from '../../core/api/api-error';
 import { AuthApi } from '../../core/auth/auth-api';
 import { Session } from '../../core/auth/session';
 import { safeReturnUrl } from '../../core/navigation/return-url';
+import { DEMO } from '../../demo/demo-mode';
 import { PasswordField } from '../../shared/password-field';
 import { LoginIntro } from './login-intro';
 
@@ -29,9 +30,11 @@ export class LoginPage {
   protected readonly submitted = signal(false);
   /** Ekran mowi, ze sesja wygasla, tylko gdy klient tu trafil przez wygasniecie. */
   protected readonly expired = this.session.expired();
+  /** Tryb demo: dowolne dane logowania, nic nie wychodzi z przegladarki. */
+  protected readonly demo = DEMO;
 
   protected readonly form = inject(NonNullableFormBuilder).group({
-    email: ['', [Validators.required, Validators.email]],
+    email: [DEMO ? 'demo@broker-ledger.pl' : '', [Validators.required, Validators.email]],
     password: ['', [Validators.required, Validators.minLength(8), Validators.maxLength(128)]],
   });
 
