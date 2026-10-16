@@ -1,0 +1,7 @@
+node_modules
+dist
+.angular
+.stryker-tmp
+reports
+test-results
+playwright-report

@@ -1,0 +1,14 @@
+**/bin
+**/obj
+**/node_modules
+**/dist
+**/.angular
+**/.stryker-tmp
+**/reports
+**/test-results
+**/playwright-report
+StrykerOutput
+TestResults
+.git
+.github
+docs

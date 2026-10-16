@@ -1,4 +1,8 @@
-# Baza do lokalnego uruchomienia: docker compose up -d, potem dotnet run --project src/BrokerLedger.Api
+# Lokalna praca nad API:   docker compose up -d   (sam PostgreSQL na 5434, potem dotnet run --project src/BrokerLedger.Api)
+# Calosc w kontenerach:     docker compose --profile app up --build
+#   front  http://localhost:8093   (broker: Pulpit, Zlecenia, Ksiega; /api przez nginx)
+#   API    http://localhost:8091   (OpenAPI: /openapi/v1.json, przegladarka: /docs)
+#   gielda http://localhost:8090   (terminal Parkietu; boty skladaja zlecenia, wiec rynek zyje)
 services:
   postgres:
     image: postgres:17-alpine
@@ -14,6 +18,99 @@ services:
       test: ["CMD-SHELL", "pg_isready -U broker -d broker_ledger"]
       interval: 2s
       retries: 15
+
+  api:
+    build: .
+    image: ghcr.io/sitkowski01/broker-ledger-api:latest
+    profiles: [app]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      parkiet:
+        condition: service_started
+    environment:
+      ConnectionStrings__Ledger: Host=postgres;Port=5432;Database=broker_ledger;Username=broker;Password=broker
+      Database__MigrateOnStartup: "true"
+      # Klucz tylko do lokalnego pokazu; na serwerze ustawia sie wlasny (min. 32 bajty).
+      Jwt__SigningKey: compose-demo-signing-key-at-least-32-bytes
+      Exchange__BaseUrl: http://parkiet:8080/
+      ExchangeEvents__BootstrapServers: kafka:19092
+      # Adres klienta (limit logowan na IP) z X-Forwarded-For — ale tylko od naszego nginx.
+      ReverseProxy__KnownProxies__0: 172.28.0.10
+    ports:
+      - "8091:8080"
+    networks: [default]
+
+  web:
+    build: web
+    image: ghcr.io/sitkowski01/broker-ledger-web:latest
+    profiles: [app]
+    depends_on: [api]
+    ports:
+      - "8093:80"
+    networks:
+      default:
+        ipv4_address: 172.28.0.10
+
+  # Gielda Parkiet z obrazu w GHCR (repo parkiet-exchange), z botami. Wlasna baza, Kafka wspolna z brokerem.
+  parkiet:
+    image: ghcr.io/sitkowski01/parkiet-exchange:latest
+    profiles: [app]
+    depends_on:
+      parkiet-postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://parkiet-postgres:5432/exchange
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:19092
+      SPRING_PROFILES_ACTIVE: demo
+      EXCHANGE_JOURNAL_RESUME: "true"
+    ports:
+      - "8090:8080"
+
+  parkiet-postgres:
+    image: postgres:17-alpine
+    profiles: [app]
+    environment:
+      POSTGRES_DB: exchange
+      POSTGRES_USER: exchange
+      POSTGRES_PASSWORD: exchange
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "exchange", "-d", "exchange"]
+      interval: 2s
+      retries: 30
+
+  # Kafka w trybie KRaft, jeden wezel. INTERNAL (kafka:19092) dla kontenerow, PLAINTEXT (localhost:9092)
+  # dla API uruchomionego poza Dockerem.
+  kafka:
+    image: apache/kafka-native:4.2.1
+    profiles: [app]
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,INTERNAL://:19092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,INTERNAL://kafka:19092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_SHARE_COORDINATOR_STATE_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_SHARE_COORDINATOR_STATE_TOPIC_MIN_ISR: 1
+
+# Stala podsiec, zeby API znalo adres nginx (zaufane proxy) z gory.
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
 
 volumes:
   ledger-data:
