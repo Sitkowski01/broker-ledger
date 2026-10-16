@@ -31,4 +31,10 @@ describe('settlement feed model', () => {
     expect(settlementFeed(entries, 2)).toHaveLength(2);
     expect(settlementFeed(entries)[0].time).toBe('19:42:07');
   });
+
+  it('leaves the amount out when the entry has no client posting', () => {
+    const entry: HistoryEntryDto = { ...base, sequence: 9, description: 'release', postings: [{ owner: 'broker', account: 'bank', asset: 'PLN', side: 'debit', amount: '1.00' }] };
+
+    expect(settlementFeed([entry])[0].title).toBe('Wróciło ');
+  });
 });

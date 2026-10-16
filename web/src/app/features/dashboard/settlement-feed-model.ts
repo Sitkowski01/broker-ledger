@@ -22,7 +22,8 @@ export function settlementFeed(entries: readonly HistoryEntryDto[], limit = 5): 
     .slice(0, limit)
     .map((e) => {
       const order = e.orderId ? `Zlecenie ${shortId(e.orderId)}` : 'Zlecenie';
-      const mine = e.postings.find((p) => p.owner === 'client' && p.account === 'blocked') ?? e.postings.find((p) => p.owner === 'client');
+      // Blokada i zwrot przesuwaja te sama kwote miedzy kontami klienta — wystarczy pierwszy jego zapis.
+      const mine = e.postings.find((p) => p.owner === 'client');
       const amount = mine ? `${unitsText(mine.asset, unitsOf(mine))}${mine.asset === 'PLN' ? ' zł' : ` ${mine.asset}`}` : '';
       const base = { sequence: e.sequence, time: timeOf(e.createdAt) };
       switch (e.description) {
