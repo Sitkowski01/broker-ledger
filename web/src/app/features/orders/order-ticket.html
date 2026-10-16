@@ -1,0 +1,85 @@
+<div class="bar">
+  <h2 id="ticket-title">${{ symbolValue() }}</h2>
+  <span class="pill side" [class.sell]="side() === 'sell'">{{ side() === 'buy' ? 'Kupno' : 'Sprzedaż' }}</span>
+  <span class="meta" [class.sell]="side() === 'sell'"><span class="live blink" aria-hidden="true"></span>Nowe zlecenie</span>
+</div>
+<form class="body" (submit)="submit($event)" novalidate>
+  <div class="seg sides" role="group" aria-label="Strona zlecenia">
+    <button type="button" class="buy" [attr.aria-pressed]="side() === 'buy'" (click)="setSide('buy')">Kupno</button>
+    <button type="button" class="sell" [attr.aria-pressed]="side() === 'sell'" (click)="setSide('sell')">Sprzedaż</button>
+  </div>
+
+  <div class="form-group">
+    <label class="label" for="symbol">Walor</label>
+    <div class="field select">
+      <select id="symbol" [formControl]="symbol">
+        @for (c of symbols; track c.symbol) {
+          <option [value]="c.symbol">{{ c.name }} — {{ c.symbol }}</option>
+        }
+      </select>
+      @if (lastText(); as last) {
+        <span class="num last">{{ last }}</span>
+      }
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+    </div>
+    <p class="hint">{{ heldText() }}</p>
+  </div>
+
+  <div class="form-group">
+    <span class="label" id="type-label">Typ zlecenia</span>
+    <div class="seg" role="group" aria-labelledby="type-label">
+      <button type="button" [attr.aria-pressed]="type() === 'limit'" (click)="setType('limit')">Z limitem</button>
+      <button type="button" [attr.aria-pressed]="type() === 'market'" [disabled]="side() === 'buy'" (click)="setType('market')"
+              [attr.aria-describedby]="side() === 'buy' ? 'pkc-note' : null">PKC</button>
+    </div>
+    @if (side() === 'buy') {
+      <p id="pkc-note" class="hint">Kupno po każdej cenie jest wyłączone — bez limitu nie wiadomo, ile zablokować.</p>
+    }
+  </div>
+
+  <div class="pair">
+    @if (type() === 'limit') {
+      <div class="form-group">
+        <div class="label-row">
+          <label class="label" for="price">Limit</label>
+        </div>
+        <div class="field" [class.invalid]="priceError()">
+          <input id="price" class="num" inputmode="decimal" autocomplete="off" placeholder="0,00" [formControl]="price"
+                 [attr.aria-invalid]="!!priceError()" [attr.aria-describedby]="priceError() ? 'price-error' : null" />
+          <span class="micro">zł</span>
+        </div>
+      </div>
+    }
+    <div class="form-group">
+      <div class="label-row">
+        <label class="label" for="quantity">Ilość</label>
+      </div>
+      <div class="field" [class.invalid]="quantityError()">
+        <input id="quantity" class="num" inputmode="numeric" autocomplete="off" [formControl]="quantity"
+               [attr.aria-invalid]="!!quantityError()" [attr.aria-describedby]="quantityError() ? 'quantity-error' : null" />
+        <span class="micro">szt.</span>
+      </div>
+    </div>
+  </div>
+  @if (priceError(); as message) {
+    <p id="price-error" class="field-error">{{ message }}</p>
+  }
+  @if (quantityError(); as message) {
+    <p id="quantity-error" class="field-error">{{ message }}</p>
+  }
+
+  <dl class="summary num">
+    <div><dt class="micro">Wartość</dt><dd>{{ summary().value }}</dd></div>
+    <div><dt class="micro">Prowizja 0,39% · min 3 zł</dt><dd>{{ summary().commission }}</dd></div>
+    <div class="total"><dt class="micro">{{ summary().blockLabel }}</dt><dd [class.short]="!!quantityError()">{{ summary().block }}</dd></div>
+    <div><dt class="micro">{{ summary().afterLabel }}</dt><dd class="after">{{ summary().after }}</dd></div>
+  </dl>
+
+  <button class="btn" [class.sell]="side() === 'sell'" type="submit">
+    {{ cta() }}
+  </button>
+  <p class="note">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg>
+    <span>Najpierw blokujemy środki, dopiero potem zlecenie idzie na giełdę. Podwójne kliknięcie nie złoży drugiego.</span>
+  </p>
+</form>
