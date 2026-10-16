@@ -9,6 +9,23 @@ namespace BrokerLedger.Api.Tests;
 public sealed class PlatformTests(BrokerApi api)
 {
     [Fact]
+    public async Task OpenApi_describes_the_endpoints_and_the_token_and_docs_show_it()
+    {
+        using var http = api.CreateClient();
+
+        var document = await http.GetFromJsonAsync<System.Text.Json.JsonElement>("/openapi/v1.json");
+        var docs = await http.GetAsync(new Uri("/docs", UriKind.Relative));
+
+        var paths = document.GetProperty("paths").EnumerateObject().Select(p => p.Name).ToList();
+        Assert.Contains("/api/me/orders", paths);
+        Assert.Contains("/api/me/events", paths);
+        Assert.Contains("/api/me/performance", paths);
+        Assert.Equal("bearer", document.GetProperty("components").GetProperty("securitySchemes").GetProperty("Bearer").GetProperty("scheme").GetString());
+        Assert.Equal(HttpStatusCode.OK, docs.StatusCode);
+        Assert.Contains("swagger-ui-dist@5.32.15", await docs.Content.ReadAsStringAsync(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Login_attempts_are_limited_per_address()
     {
         using var limited = api.With(("RateLimits:AuthPerMinute", "3"));

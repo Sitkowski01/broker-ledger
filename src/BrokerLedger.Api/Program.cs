@@ -19,6 +19,7 @@ if (string.IsNullOrWhiteSpace(connectionString))
     throw new InvalidOperationException("ConnectionStrings:Ledger is not configured");
 }
 builder.Services.AddLedgerInfrastructure(connectionString);
+builder.Services.AddApiDocs();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<LedgerExceptionHandler>();
 builder.Services.AddBrokerAuth(builder.Configuration);
@@ -57,6 +58,7 @@ app.UseAuthorization();
 app.UseRateLimiter();
 
 app.MapHealthChecks("/health");
+app.MapApiDocs();
 app.MapAuthEndpoints();
 app.MapAccountEndpoints();
 app.MapOrderEndpoints();
