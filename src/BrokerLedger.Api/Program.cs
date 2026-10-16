@@ -3,6 +3,7 @@ using BrokerLedger.Api;
 using BrokerLedger.Api.Accounts;
 using BrokerLedger.Api.Auth;
 using BrokerLedger.Api.Errors;
+using BrokerLedger.Api.Events;
 using BrokerLedger.Api.Market;
 using BrokerLedger.Api.Orders;
 using BrokerLedger.Api.Portfolios;
@@ -23,6 +24,7 @@ builder.Services.AddExceptionHandler<LedgerExceptionHandler>();
 builder.Services.AddBrokerAuth(builder.Configuration);
 builder.Services.AddBrokerRateLimits(builder.Configuration);
 builder.Services.AddBrokerOrders(builder.Configuration);
+builder.Services.Configure<EventsOptions>(builder.Configuration.GetSection(EventsOptions.Section));
 builder.Services.AddBrokerPortfolio(builder.Configuration);
 builder.Services.AddHealthChecks().AddLedgerDatabaseCheck();
 // Za reverse proxy adres klienta jest w X-Forwarded-For. Ufamy tylko proxy z konfiguracji
@@ -58,6 +60,7 @@ app.MapHealthChecks("/health");
 app.MapAuthEndpoints();
 app.MapAccountEndpoints();
 app.MapOrderEndpoints();
+app.MapEventEndpoints();
 app.MapPortfolioEndpoints();
 app.MapMarketEndpoints();
 
