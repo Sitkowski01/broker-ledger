@@ -20,6 +20,7 @@ const FILTERS: readonly { key: OrderFilter; label: string }[] = [
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [OrderSaga],
   templateUrl: './order-list.html',
+  styleUrl: './order-list.css',
   host: { class: 'panel', role: 'region', 'aria-labelledby': 'orders-title' },
 })
 export class OrderList {
