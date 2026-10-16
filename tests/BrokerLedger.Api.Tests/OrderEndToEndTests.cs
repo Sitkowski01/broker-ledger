@@ -32,6 +32,8 @@ public sealed partial class OrderEndToEndTests(BrokerApi api)
         Assert.Equal(("accepted", "PLN", Blocked), (Text(order, "status"), Text(order, "blockedAsset"), Text(order, "blocked")));
         // Czas zlozenia do kolumny "Zlozone" na liscie zlecen we froncie.
         Assert.InRange(order.GetProperty("createdAt").GetDateTimeOffset(), before, DateTimeOffset.UtcNow.AddSeconds(1));
+        // Kroki sagi do osi "przebieg zlecenia" we froncie.
+        Assert.Equal((true, false), (order.GetProperty("fundsBlocked").GetBoolean(), order.GetProperty("fundsReleased").GetBoolean()));
         var sent = Assert.Single(api.Parkiet.Placed, p => Cid(p) == Guid.Parse(Text(order, "id")!).ToString("N"));
         Assert.Equal(("BUY", "LIMIT", "250.00", 10L), (Text(sent, "side"), Text(sent, "type"), Text(sent, "price"), sent.GetProperty("quantity").GetInt64()));
         Assert.Equal(("7490.25", Blocked), await BalanceAsync(http));
@@ -51,6 +53,7 @@ public sealed partial class OrderEndToEndTests(BrokerApi api)
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
         var order = await response.JsonAsync();
         Assert.Equal(("rejected", "insufficient funds"), (Text(order, "status"), Text(order, "rejectionReason")));
+        Assert.False(order.GetProperty("fundsBlocked").GetBoolean());
         Assert.Equal(callsBefore, api.Parkiet.PlaceCalls);
         Assert.Equal(("100.00", "0.00"), await BalanceAsync(http));
     }
@@ -66,7 +69,9 @@ public sealed partial class OrderEndToEndTests(BrokerApi api)
         var response = await PlaceAsync(http, "o-1", Buy());
 
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
-        Assert.Equal(reason, Text(await response.JsonAsync(), "rejectionReason"));
+        var order = await response.JsonAsync();
+        Assert.Equal(reason, Text(order, "rejectionReason"));
+        Assert.Equal((true, true), (order.GetProperty("fundsBlocked").GetBoolean(), order.GetProperty("fundsReleased").GetBoolean()));
         Assert.Equal(("10000.00", "0.00"), await BalanceAsync(http));
     }
 
