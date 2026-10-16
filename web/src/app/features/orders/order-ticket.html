@@ -81,7 +81,9 @@
     <div><dt class="micro">{{ summary().afterLabel }}</dt><dd class="after">{{ summary().after }}</dd></div>
   </dl>
 
-  @if (generalError(); as message) {
+  @if (retryAfter(); as seconds) {
+    <bl-retry-countdown [seconds]="seconds" (done)="error.set(null)" />
+  } @else if (generalError(); as message) {
     <p class="alert error" role="alert">{{ message }}</p>
   }
   @if (rejected(); as message) {

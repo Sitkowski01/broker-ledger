@@ -8,6 +8,7 @@ import { newIdempotencyKey } from '../../core/api/idempotency-key';
 import { formatCents, formatQuantity, parseCents } from '../../core/format/money';
 import { companyName, SYMBOLS } from '../../core/market/companies';
 import { OrderApi, OrderDto, OrderSide, OrderType } from '../../core/orders/order-api';
+import { RetryCountdown } from '../../shared/retry-countdown';
 import { placedMessage, rejectionText } from './order-model';
 import { ctaText, maxBuyQuantity, parseQuantity, summaryRows, ticketErrors, TicketInput } from './ticket-model';
 
@@ -18,7 +19,7 @@ import { ctaText, maxBuyQuantity, parseQuantity, summaryRows, ticketErrors, Tick
 @Component({
   selector: 'bl-order-ticket',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, RetryCountdown],
   templateUrl: './order-ticket.html',
   styleUrl: './order-ticket.css',
   host: {
@@ -89,6 +90,12 @@ export class OrderTicket {
     const { quantity, short } = this.errors();
     return this.fieldError('quantity') ?? (this.submitted() || short ? quantity : null);
   });
+  /** 429: ile sekund odczekac — zamiast komunikatu bledu pokazujemy odliczanie. */
+  protected readonly retryAfter = computed(() => {
+    const error = this.error();
+    return error?.kind === 'rate-limited' ? error.retryAfterSeconds : null;
+  });
+
   protected readonly generalError = computed(() => {
     const error = this.error();
     if (!error) {

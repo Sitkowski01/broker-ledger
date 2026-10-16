@@ -6,6 +6,7 @@ import { AccountApi, TransferKind } from '../../core/account/account-api';
 import { ApiError, toApiError } from '../../core/api/api-error';
 import { newIdempotencyKey } from '../../core/api/idempotency-key';
 import { formatCents, parseCents } from '../../core/format/money';
+import { RetryCountdown } from '../../shared/retry-countdown';
 import { shareOf, transferError, TransferRow } from './transfer-model';
 
 const DEPOSIT_STEPS = [50_000, 100_000, 500_000];
@@ -18,7 +19,7 @@ const WITHDRAWAL_SHARES = [25, 50, 100];
 @Component({
   selector: 'bl-transfer-panel',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [ReactiveFormsModule, RouterLink, RetryCountdown],
   templateUrl: './transfer-panel.html',
   styleUrl: './transfer-panel.css',
   host: { class: 'panel', role: 'region', 'aria-labelledby': 'transfer-title' },
@@ -61,6 +62,12 @@ export class TransferPanel {
       return error.fields['amount'] ?? error.fields['currency'] ?? 'Niepoprawna wartość.';
     }
     return this.submitted() ? this.localError() : null;
+  });
+
+  /** 429: ile sekund odczekac — zamiast komunikatu bledu pokazujemy odliczanie. */
+  protected readonly retryAfter = computed(() => {
+    const error = this.error();
+    return error?.kind === 'rate-limited' ? error.retryAfterSeconds : null;
   });
 
   protected readonly generalError = computed(() => {
