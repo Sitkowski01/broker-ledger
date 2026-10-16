@@ -3,6 +3,7 @@ import { toApiError } from '../../core/api/api-error';
 import { shortDateTime } from '../../core/format/dates';
 import { OrderApi, OrderDto } from '../../core/orders/order-api';
 import { matchesFilter, OrderFilter, orderRow } from './order-model';
+import { OrderSaga } from './order-saga';
 
 const FILTERS: readonly { key: OrderFilter; label: string }[] = [
   { key: 'all', label: 'Wszystkie' },
@@ -17,6 +18,7 @@ const FILTERS: readonly { key: OrderFilter; label: string }[] = [
 @Component({
   selector: 'bl-order-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [OrderSaga],
   templateUrl: './order-list.html',
   host: { class: 'panel', role: 'region', 'aria-labelledby': 'orders-title' },
 })

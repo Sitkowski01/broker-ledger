@@ -50,6 +50,16 @@ describe('OrderList', () => {
     expect(l.rows()).toEqual(['PKN']);
   });
 
+  it('shows the saga of the newest order and of the one picked', async () => {
+    const l = await render();
+    expect(l.el.querySelector('bl-order-saga h3')?.textContent).toBe('CDR · kupno 10 szt. po 250,00 zł');
+
+    await l.click('Przebieg', l.el.querySelectorAll('tbody tr')[2]);
+    expect(l.el.querySelector('bl-order-saga h3')?.textContent).toContain('ALE');
+    expect(l.el.querySelector('bl-order-saga .foot')?.textContent).toContain('Reconciler zapyta');
+    expect(l.el.querySelectorAll('tbody tr')[2].classList).toContain('sel');
+  });
+
   it('asks before cancelling and tells the parent when the exchange agreed', async () => {
     const l = await render();
     await l.click('Anuluj');

@@ -80,3 +80,7 @@
     </table>
   </div>
 }
+
+@if (selected(); as order) {
+  <bl-order-saga class="saga" [order]="order" [now]="now()" />
+}
