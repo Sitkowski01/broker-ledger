@@ -24,10 +24,17 @@ klient ──► broker-ledger ──zlecenie──► Parkiet (giełda) ──t
   niewykorzystanej blokady; transakcja, która przyszła przed numerem zlecenia, czeka zamiast przepaść.
 - **Portfel z księgi** — średnia cena ważona, zysk zrealizowany i niezrealizowany po ostatniej transakcji, wartość
   w walutach po kursach NBP; NBP leży → portfel otwiera się z ostatnią znaną tabelą (cache, ponowienia, bezpiecznik).
-- **Testy** — 529: jednostkowe, własności (FsCheck), architektury, integracyjne na prawdziwym PostgreSQL i Kafce
-  (Testcontainers), e2e po HTTP; testy mutacyjne w CI na trzech warstwach (domena 99,6%, baza 98,2%, API 98,2%).
+- **Na żywo** — wyzwalacze PostgreSQL wysyłają `NOTIFY` przy każdej zmianie zlecenia i salda, API rozsyła to przez
+  Server-Sent Events. Działa przy kilku instancjach API; po przerwie w połączeniu klient dostaje `resync`.
+- **Front w Angularze 22** (sygnały, bez zone.js) — Pulpit z wykresem wyniku bez wpłat, Zlecenia z blokadą liczoną przed
+  kliknięciem i osią sagi, Księga z dokumentami Wn/Ma i kontem T. **Tryb demo bez serwera**: `cd web && npm run demo`.
+- **Testy** — backend 597 (jednostkowe, własności FsCheck, architektury, integracyjne na prawdziwym PostgreSQL i Kafce,
+  e2e po HTTP), front 241 (Vitest) + e2e w przeglądarce (Playwright); testy mutacyjne w CI na czterech warstwach
+  (domena, baza, API, logika frontu 83%).
 
-C# / .NET 10, ASP.NET Core (minimal API, JWT, rate limiting), EF Core + PostgreSQL, Kafka (Confluent.Kafka), xUnit, FsCheck, Testcontainers, Stryker.NET.
+C# / .NET 10, ASP.NET Core (minimal API, JWT, rate limiting, SSE), EF Core + PostgreSQL, Kafka (Confluent.Kafka), xUnit, FsCheck, Testcontainers, Stryker.NET · Angular 22, RxJS, Vitest, fast-check, Playwright, StrykerJS.
+
+![Pulpit: wartość rachunku, wynik bez wpłat, przelew, portfel i rozliczenia na żywo](docs/pulpit.png)
 
 <details>
 <summary><b>In English</b></summary>
@@ -41,8 +48,14 @@ come back from the exchange over Kafka (at least once) into an inbox and are set
 booked once: purchase and sale entries with a commission charged on the whole fill, and the unused part of the block returned. The portfolio
 is derived from the ledger itself (weighted average cost, realized and unrealized P&L at the last trade price) and
 converted to other currencies at NBP mid rates, fetched through a cached, retrying, circuit-breaking HTTP client that
-falls back to the last known table when NBP is down. Tested with unit, property-based,
-architecture, integration (Testcontainers: PostgreSQL and Kafka) and end-to-end tests, plus mutation testing in CI.
+falls back to the last known table when NBP is down.
+Changes reach the browser live: PostgreSQL triggers send `NOTIFY` on every order change and ledger posting, and the API
+streams them as Server-Sent Events (a signal, not data — clients re-read state, and get `resync` after a lost connection).
+The Angular 22 front end (signals, no zone.js) shows the account value with a performance chart excluding deposits,
+an order ticket that computes the block before submitting, the saga of each order, and the double-entry ledger with a
+T account; a demo build runs the whole app in the browser against a simulated broker with the same rules. Tested with unit, property-based,
+architecture, integration (Testcontainers: PostgreSQL and Kafka) and end-to-end tests, plus mutation testing in CI. Front
+end: Vitest, fast-check, Playwright and StrykerJS.
 </details>
 
 ## Zakres
@@ -56,6 +69,8 @@ architecture, integration (Testcontainers: PostgreSQL and Kafka) and end-to-end 
 | 5 | Zlecenia (saga): blokada → Parkiet z `clientOrderId` → przyjęcie albo zwolnienie; reconciler dla timeoutów | ✅ |
 | 6 | Rozliczenie transakcji z Kafki: inbox, prowizja od całego wykonania, zwolnienie reszty blokady, odporne na powtórki | ✅ |
 | 7 | Portfel z księgi: pozycje, średnia cena ważona, zysk zrealizowany i niezrealizowany, wartość w walutach po kursach NBP (cache, ponowienia, bezpiecznik) | ✅ |
+| 8 | Front w Angularze: logowanie, Pulpit (wartość w walutach NBP, wykres wyniku, przelewy, portfel, rozliczenia na żywo), Zlecenia, Księga; SSE z LISTEN/NOTIFY; stany (szkielety, offline, 429, powiadomienia); tryb demo; Playwright | ✅ |
+| 9 | Dockerfile (bez roota) i obraz frontu (nginx), wspólny compose z giełdą, e2e całego systemu w CI, obrazy w GHCR, OpenAPI + Swagger UI, metryki Prometheusa | ✅ |
 
 ## Pieniądze
 
@@ -136,8 +151,12 @@ wypłata 100 zł        Wn ClientAvailable:PLN   100   │  Ma Bank:PLN         
 | `GET` | `/api/me/balances` | salda klienta: na każde aktywo `available` i `blocked` |
 | `POST` | `/api/me/deposits` | wpłata `{amount: "250.40", currency: "PLN"}` (symulowany przelew przychodzący) |
 | `POST` | `/api/me/withdrawals` | wypłata; za mało środków → 422 z kwotą dostępną |
-| `GET` | `/api/me/history?limit=20&before=…` | dokumenty klienta od najnowszych, tylko jego zapisy; kursor `nextBefore` |
+| `GET` | `/api/me/history?limit=20&before=…&kind=…` | dokumenty klienta od najnowszych, tylko jego zapisy, z kluczem dokumentu; kursor `nextBefore`; `kind` = `transfers` / `trades` / `blocks` |
 | `GET` | `/api/me/portfolio` | pozycje, średnia cena, zysk/strata, wartość w walutach po kursach NBP — [niżej](#portfel-i-kursy-nbp) |
+| `GET` | `/api/me/performance?days=30` | wynik bez wpłat i wypłat (`days` = 7 albo 30): punkt na koniec każdego dnia i „teraz” — [niżej](#wynik-w-czasie) |
+| `GET` | `/api/me/events` | Server-Sent Events: `order`, `ledger`, `resync`, w ciszy `ping` — [niżej](#na-żywo-sse) |
+| `GET` | `/api/me/orders`, `/api/me/orders/{id}` | zlecenia klienta (z `fundsBlocked` i `fundsReleased` — kroki sagi) |
+| `GET` | `/api/market/quotes` | ostatnie ceny spółek z transakcji giełdy |
 
 - **`Idempotency-Key` jest obowiązkowy** przy wpłacie i wypłacie. Pierwsze wykonanie → 201, powtórka
   z tym samym kluczem i treścią → 200 `alreadyPosted` (nic się nie zmienia), ten sam klucz z inną treścią → 409.
@@ -158,6 +177,10 @@ wypłata 100 zł        Wn ClientAvailable:PLN   100   │  Ma Bank:PLN         
 - **Zła konfiguracja wywala start**, a nie pierwsze żądanie: brak klucza JWT (min. 32 bajty), wystawcy
   albo dodatnich limitów → `OptionsValidationException` przy uruchomieniu — **zanim** migracje dotkną bazy.
 - `/health` sprawdza połączenie z bazą — bez niej aplikacja nic nie zaksięguje.
+- **Dokumentacja**: `/openapi/v1.json` (wbudowane OpenAPI z ASP.NET Core, ze schematem Bearer) i `/docs` (Swagger UI).
+- **Metryki** (`/metrics`, format Prometheusa przez OpenTelemetry): czasy żądań HTTP oraz `broker_orders_total`
+  (strona i stan po odpowiedzi giełdy), `broker_settled_events_total`, `broker_event_streams` (otwarte strumienie SSE).
+  Eksporter Prometheusa dla OpenTelemetry jest w .NET wciąż w wersji beta — reszta pakietów jest stabilna.
 
 ## Zlecenia na giełdę (saga)
 
@@ -280,7 +303,83 @@ i wartość całego rachunku w EUR / USD / GBP / CHF po kursie średnim NBP.
   jeszcze nie było — bez przeliczeń (`"rates": null`). Po nieudanej próbie przez minutę nie pytamy wcale, żeby
   każde żądanie nie czekało na kolejny timeout. NBP nie wchodzi do `/health`: bez kursów broker działa.
 
+## Wynik w czasie
+
+`GET /api/me/performance` liczy wynik rachunku **bez wpłat i wypłat**: wartość (gotówka + akcje po cenie w danej chwili)
+minus wpłacone netto. Punkt na koniec każdego dnia w strefie giełdy i ostatni — „teraz”, więc wykres kończy się na wartości
+z Pulpitu.
+
+- Z księgi, bez osobnej tabeli wyników. Dokument, który zmienia gotówkę, a nie rusza akcji, to przepływ z zewnątrz
+  (wpłata, wypłata) — zmienia „wpłacone”, nie wynik. Blokada pod zlecenie przesuwa między kontami klienta i sama znika.
+- Ceny w chwilach z przeszłości: jedno zapytanie `unnest(spółki) × unnest(chwile)`, a każda para to jeden skok po indeksie
+  `(symbol, received_at)` w skrzynce zdarzeń giełdy — bez czytania całej historii transakcji.
+- Właściwość sprawdzana przez FsCheck: same wpłaty i wypłaty nigdy nie dają wyniku innego niż zero.
+
+## Na żywo (SSE)
+
+```
+zmiana zlecenia / zapis w księdze ──trigger──► pg_notify('client_events') ──LISTEN──► API ──SSE──► przeglądarka
+     (HTTP, reconciler, rozliczenie z Kafki)                                       (każda instancja)
+```
+
+- **Sygnał z bazy, nie z kodu C#**: zmiany robią trzy miejsca (żądanie HTTP, reconciler, rozliczenie z Kafki) i może być kilka
+  instancji API. Wyzwalacz widzi wszystkie. `NOTIFY` idzie przy `COMMIT` (wycofana transakcja nic nie wyśle), a identyczne
+  powiadomienia z jednej transakcji Postgres skleja — dokument z pięcioma zapisami to jeden sygnał.
+- **Sygnał bez kwot** — tylko „u ciebie zmieniło się zlecenie X / księga”. Front po nim pyta API o stan, więc zgubiony albo
+  podwójny sygnał niczego nie psuje. Po zerwaniu nasłuchu API wysyła wszystkim `resync` (sprawdzone testem z
+  `pg_terminate_backend`), a front po ponownym połączeniu też czyta wszystko od nowa.
+- `GET /api/me/events`: najpierw `ready`, w ciszy `ping` co 15 s (proxy nie zamknie połączenia), wolny klient traci najstarsze
+  sygnały z bufora zamiast blokować pozostałych.
+
+## Front (Angular)
+
+| | |
+|---|---|
+| ![Zlecenia: formularz z blokadą, lista, oś sagi, powiadomienie o wykonaniu](docs/zlecenia.png) | ![Księga: dokument kupna Wn/Ma, konto T](docs/ksiega.png) |
+
+Angular 22 (komponenty standalone, sygnały, `httpResource`, bez zone.js), w katalogu `web/`. Wygląd z makiet w stylu
+terminala giełdowego, ciemny motyw, układ na telefon (karty zamiast tabel, oś sagi pionowo).
+
+- **Pulpit** — wartość rachunku w PLN i w walutach NBP, struktura (akcje, gotówka, pod zleceniami), wykres wyniku bez wpłat,
+  przelewy, portfel, panel Rozliczenia na żywo. Pusty rachunek mówi, od czego zacząć.
+- **Zlecenia** — formularz liczy blokadę i prowizję tymi samymi wzorami co domena (na groszach), maks. ilość, „Ostatnia”
+  cena; kupno PKC wyłączone z wyjaśnieniem. Lista z filtrem i anulowaniem z potwierdzeniem, oś sagi z pól zlecenia
+  (zapis → blokada → giełda → rozliczenie → zwolnienie reszty).
+- **Księga** — dokumenty Wn/Ma po dniach, bilans per aktywo, klucz dokumentu, filtr rodzaju po stronie API, kursor
+  „Wczytaj starsze”, konto T dostępnych złotówek za dziś (otwarcie liczone wstecz z bieżącego salda).
+
+Decyzje, które łatwo przeoczyć:
+
+- **Klucz idempotencji na próbę**, nie na kliknięcie: ponowienie po zerwanym połączeniu wysyła ten sam klucz (API zwróci to
+  samo zlecenie), zmiana pola w formularzu — nowy.
+- **Ostatnia dobra odpowiedź** (`linkedSignal`): nieudane odświeżenie nie kasuje ekranu — inaczej po przelewie i 429 przy
+  odświeżeniu znikałoby potwierdzenie razem z kluczem, a klient kliknąłby jeszcze raz.
+- **SSE przez `HttpClient` z `fetch`**, nie `EventSource` — ten nie wyśle nagłówka `Authorization`. Ekrany odświeżają się po
+  sygnale najwyżej raz na okno (Zlecenia 1 s, Pulpit i Księga 4 s), bo limit API to 120 zapytań na minutę na klienta;
+  bez strumienia Zlecenia wracają do odpytywania (3 s przy sadze w ruchu, 15 s przy zleceniu czekającym, nic w ukrytej karcie).
+- **Stany**: szkielety zamiast „Wczytywanie”, pasek „Brak połączenia” z czasem danych i „Spróbuj teraz”, 429 z odliczaniem
+  `Retry-After` (formularz zostaje wypełniony), powiadomienia o transakcjach i wykonaniu zlecenia.
+- **Ekrany nie importują się nawzajem** — pilnuje tego dependency-cruiser w CI (wspólne rzeczy w `core` i `shared`).
+
+**Tryb demo** (`npm run demo`, build `npm run build:demo`) — ten sam front bez serwera: ostatni interceptor HTTP odpowiada
+zamiast sieci, a sygnały na żywo idą prosto z symulatora brokera w przeglądarce. Symulator ma te same zasady co serwer
+(blokada, prowizja od całego wykonania, saga, dokumenty Wn/Ma jak `JournalEntries`), a ceny startowe są nagrane z sesji
+z botami Parkietu. Kod demo jest w `web/src/app/demo/` i wchodzi do builda tylko w konfiguracji `demo`.
+
 ## Uruchomienie
+
+Całość w kontenerach (broker, front, giełda Parkiet z botami, Kafka, bazy):
+
+```bash
+docker compose --profile app up --build
+# front    http://localhost:8093   (nowe konto, wpłata, zlecenie — boty Parkietu je wykonają)
+# API      http://localhost:8091/docs   (Swagger UI; opis: /openapi/v1.json, metryki: /metrics)
+# giełda   http://localhost:8090   (terminal Parkietu)
+```
+
+Obrazy `broker-ledger-api` i `broker-ledger-web` CI publikuje w GHCR po zielonych testach i e2e całego systemu.
+
+Praca nad API:
 
 ```bash
 docker compose up -d                          # PostgreSQL na porcie 5434
@@ -302,6 +401,14 @@ curl localhost:8091/api/me/balances -H "Authorization: Bearer $TOKEN"
 Klucz JWT w `appsettings.Development.json` służy tylko do lokalnego uruchomienia; poza nim
 ustawia się go zmienną `Jwt__SigningKey`.
 
+Front (Node 24):
+
+```bash
+cd web && npm ci
+npm start           # http://localhost:4200, /api przez proxy do API na 8091
+npm run demo        # bez serwera i bez Dockera: symulator brokera w przeglądarce, dowolny e-mail i hasło
+```
+
 ## Testy
 
 ```bash
@@ -310,6 +417,16 @@ dotnet tool restore
 dotnet stryker                # testy mutacyjne domeny, próg 80%
 dotnet stryker -f stryker-infrastructure.json   # testy mutacyjne warstwy bazy (kilka minut)
 dotnet stryker -f stryker-api.json              # testy mutacyjne API na testach e2e
+```
+
+Front (w `web/`):
+
+```bash
+npx ng test --watch=false    # jednostkowe i komponentów (Vitest)
+npm run arch                 # architektura frontu (dependency-cruiser)
+npm run stryker              # testy mutacyjne logiki frontu, próg 80%
+npm run e2e                  # Playwright na trybie demo (sam stawia serwer)
+E2E_LIVE=1 npm run e2e       # + prawdziwe API (8091) z PostgreSQL, Kafką i giełdą Parkiet
 ```
 
 | Rodzaj | Co sprawdza |
@@ -333,7 +450,12 @@ dotnet stryker -f stryker-api.json              # testy mutacyjne API na testach
 | Portfel (jednostkowe + FsCheck) | średnia z prowizją, częściowa i pełna sprzedaż, prowizja równa wartości, blokady bez wpływu, akcje z kosztem 0; losowe ciągi kupna i sprzedaży nie gubią ani nie dorabiają grosza |
 | Kursy NBP | format tabeli A i odrzucanie zepsutych odpowiedzi; pamięć, przeterminowana tabela, przerwa po awarii, jedno zapytanie dla wielu żądań; prawdziwy potok odporności: 5xx ponawiane, zawieszona próba ucięta, 404 bez ponowień |
 | E2E portfela | HTTP → księga i skrzynka w PostgreSQL → atrapa NBP: wycena, waluty, NBP leży, tabela przeterminowana; pełna droga zlecenie → Kafka → rozliczenie → portfel wyceniony po późniejszej cudzej transakcji |
-| Mutacyjne | Stryker psuje kod i sprawdza, czy testy to wykryją — osobno domena, warstwa bazy i API |
+| Sygnały na żywo (integracyjne) | wyzwalacze NOTIFY na prawdziwym PostgreSQL: dokument to jeden sygnał, cudze nie docierają, po `pg_terminate_backend` nasłuchu jest `resync`; strumień SSE po HTTP: `ready`, saga zlecenia, `ping` |
+| Wynik w czasie | FsCheck: same wpłaty/wypłaty dają wynik 0; kupno kosztuje tylko prowizję; koniec dnia w Warszawie także przy zmianie czasu; cena w chwili z przeszłości w PostgreSQL |
+| Front (Vitest) | rachunki formularza zlecenia (fast-check: maks. ilość nigdy ponad blokadę), modele ekranów, komponenty na atrapie API (`HttpTestingController`), strumień SSE kawałkami, symulator demo |
+| Front e2e (Playwright) | tryb demo: pełna ścieżka kupna (saga, powiadomienia, księga), odmowa przed wysłaniem, telefon bez poziomego przewijania; live: nowy klient, wpłata, zlecenie na Parkiecie, wpłata z innego miejsca widoczna bez odświeżania (SSE) |
+| Architektura (front) | ekrany nie importują się nawzajem, `core` nie zna widoków (dependency-cruiser) |
+| Mutacyjne | Stryker psuje kod i sprawdza, czy testy to wykryją — osobno domena, warstwa bazy, API i logika frontu |
 
 Na Windowsie z zainstalowanym Visual Studio 2022 Stryker bierze jego starszy MSBuild, który nie zna
 .NET 10 — wtedy `dotnet stryker --msbuild-path "C:/Program Files/dotnet/sdk/<wersja>/MSBuild.dll"`.
