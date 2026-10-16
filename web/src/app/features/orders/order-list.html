@@ -40,9 +40,11 @@
         @for (o of rows(); track o.id) {
           <tr [class.sel]="o.id === selected()?.id">
             <td class="num when">{{ o.at }}</td>
-            <td class="walor">
-              <span class="sym">{{ o.symbol }}</span>
-              <span class="type">{{ o.typeLabel }}</span>
+            <td>
+              <span class="walor">
+                <span class="sym">{{ o.symbol }}</span>
+                <span class="type">{{ o.typeLabel }}</span>
+              </span>
             </td>
             <td><span class="pill" [class]="o.side">{{ o.sideLabel }}</span></td>
             <td class="num r limit">{{ o.limit }}</td>
@@ -52,27 +54,29 @@
                 <span class="num">{{ o.fill }}</span>
               </span>
             </td>
-            <td><span class="pill status" [class]="o.tone"><span class="dot" aria-hidden="true"></span>{{ o.status }}</span></td>
+            <td><span class="pill status" [class]="'tone-' + o.tone"><span class="dot" aria-hidden="true"></span>{{ o.status }}</span></td>
             <td class="num r blocked">{{ o.block }}</td>
-            <td class="r actions">
-              @if (asking() === o.id) {
-                <span class="confirm">
-                  <span>Anulować?</span>
-                  <button type="button" class="ghost danger" (click)="confirm(o.id)">Tak</button>
-                  <button type="button" class="ghost" (click)="dismiss()">Nie</button>
-                </span>
-              } @else {
-                @if (o.cancellable) {
-                  <button type="button" class="ghost danger" [disabled]="cancelling() === o.id" (click)="ask(o.id)"
-                          [attr.aria-label]="'Anuluj zlecenie ' + o.symbol + ' z ' + o.at">
-                    {{ cancelling() === o.id ? 'Anuluję…' : 'Anuluj' }}
+            <td class="r">
+              <span class="actions">
+                @if (asking() === o.id) {
+                  <span class="confirm">
+                    <span>Anulować?</span>
+                    <button type="button" class="ghost danger" (click)="confirm(o.id)">Tak</button>
+                    <button type="button" class="ghost" (click)="dismiss()">Nie</button>
+                  </span>
+                } @else {
+                  @if (o.cancellable) {
+                    <button type="button" class="ghost danger" [disabled]="cancelling() === o.id" (click)="ask(o.id)"
+                            [attr.aria-label]="'Anuluj zlecenie ' + o.symbol + ' z ' + o.at">
+                      {{ cancelling() === o.id ? 'Anuluję…' : 'Anuluj' }}
+                    </button>
+                  }
+                  <button type="button" class="ghost" [attr.aria-pressed]="o.id === selected()?.id" (click)="select(o.id)"
+                          [attr.aria-label]="'Pokaż przebieg zlecenia ' + o.symbol + ' z ' + o.at">
+                    Przebieg
                   </button>
                 }
-                <button type="button" class="ghost" [attr.aria-pressed]="o.id === selected()?.id" (click)="select(o.id)"
-                        [attr.aria-label]="'Pokaż przebieg zlecenia ' + o.symbol + ' z ' + o.at">
-                  Przebieg
-                </button>
-              }
+              </span>
             </td>
           </tr>
         }
