@@ -19,6 +19,26 @@ describe('AccountValue', () => {
     return { fixture, el, total, pick };
   }
 
+  it('shows where to start on an empty account and takes the client to the deposit field', async () => {
+    const empty: PortfolioDto = {
+      ...SAMPLE_PORTFOLIO,
+      positions: [],
+      closed: [],
+      summary: { cash: '0.00', sharesValue: '0.00', costBasis: '0.00', unrealizedPnl: '0.00', realizedPnl: '0.00', totalValue: '0.00' },
+    };
+    const field = document.body.appendChild(Object.assign(document.createElement('input'), { id: 'amount' }));
+    field.scrollIntoView = vi.fn();
+    const view = await render(empty);
+
+    expect(view.el.querySelector('.empty-title')?.textContent).toBe('Rachunek jest pusty');
+    expect(view.el.querySelector('.structure')).toBeNull();
+    view.el.querySelector<HTMLButtonElement>('.btn')!.click();
+    expect(document.activeElement).toBe(field);
+    field.remove();
+
+    expect((await render()).el.querySelector('.empty')).toBeNull();
+  });
+
   it('shows the value in zlotys with its NBP table', async () => {
     const view = await render();
 

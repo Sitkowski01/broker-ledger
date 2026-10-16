@@ -180,3 +180,74 @@ dd {
   font-size: 12px;
   color: var(--text-2);
 }
+
+/* Pusty rachunek: zamiast zer — od czego zaczac. */
+.empty {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  gap: 16px;
+  align-items: start;
+  padding: 20px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: rgba(3, 7, 18, 0.4);
+}
+
+.empty-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border: 1px solid var(--bull-line);
+  border-radius: 12px;
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--bull);
+}
+
+.empty-title {
+  margin-bottom: 6px;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.empty-text {
+  font-size: 14px;
+  color: var(--text-2);
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.steps li {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--text-2);
+}
+
+.steps .num {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.steps li.now {
+  border-color: rgba(16, 185, 129, 0.4);
+  background: rgba(16, 185, 129, 0.06);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.steps li.now .num {
+  color: var(--bull);
+}

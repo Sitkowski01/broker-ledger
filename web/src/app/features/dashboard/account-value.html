@@ -34,21 +34,40 @@
     }
   </div>
 
-  <ng-content />
-
-  <div class="structure">
-    <div class="bars" role="img" [attr.aria-label]="structureLabel()">
-      @for (s of slices(); track s.key) {
-        <div [class]="s.key" [style.width]="s.width"></div>
-      }
+  @if (empty()) {
+    <div class="empty">
+      <span class="empty-icon" aria-hidden="true"><svg width="28" height="28" viewBox="0 0 30 30"><path d="M8 10h14M15 10v12" stroke="currentColor" stroke-width="2" stroke-linecap="round" /><circle cx="10.5" cy="15" r="1.2" fill="currentColor" /><circle cx="19.5" cy="15" r="1.2" fill="currentColor" /></svg></span>
+      <div>
+        <p class="empty-title">Rachunek jest pusty</p>
+        <p class="empty-text">Zasil go wpłatą — przelew trafi do księgi jako pierwszy dokument Wn/Ma, a środki od razu będą dostępne pod zlecenia.</p>
+      </div>
     </div>
-    <dl>
-      @for (s of slices(); track s.key) {
-        <div>
-          <dt class="micro"><span class="swatch" [class]="s.key"></span>{{ s.label }}</dt>
-          <dd class="num"><span class="amount">{{ s.value }}</span><span class="share">{{ s.percent }}</span></dd>
-        </div>
-      }
-    </dl>
-  </div>
+    <ol class="steps">
+      <li class="now"><span class="num">01</span>Wpłać</li>
+      <li><span class="num">02</span>Złóż zlecenie</li>
+      <li><span class="num">03</span>Zobacz rozliczenie</li>
+    </ol>
+    <button type="button" class="btn" (click)="startDeposit()">
+      Wpłać pierwsze środki
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+    </button>
+  } @else {
+    <ng-content />
+
+    <div class="structure">
+      <div class="bars" role="img" [attr.aria-label]="structureLabel()">
+        @for (s of slices(); track s.key) {
+          <div [class]="s.key" [style.width]="s.width"></div>
+        }
+      </div>
+      <dl>
+        @for (s of slices(); track s.key) {
+          <div>
+            <dt class="micro"><span class="swatch" [class]="s.key"></span>{{ s.label }}</dt>
+            <dd class="num"><span class="amount">{{ s.value }}</span><span class="share">{{ s.percent }}</span></dd>
+          </div>
+        }
+      </dl>
+    </div>
+  }
 </div>

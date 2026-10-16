@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
+import { DOCUMENT } from '@angular/common';
+import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { PortfolioDto } from '../../core/account/account-api';
 import { formatSigned, parseCents } from '../../core/format/money';
 import { accountStructure, currenciesOf, returnOn, trendOf, valueIn } from './account-model';
@@ -12,6 +13,8 @@ import { accountStructure, currenciesOf, returnOn, trendOf, valueIn } from './ac
   host: { class: 'panel neon', role: 'region', 'aria-labelledby': 'value-title' },
 })
 export class AccountValue {
+  private readonly document = inject(DOCUMENT);
+
   readonly portfolio = input.required<PortfolioDto>();
   readonly available = input.required<number>();
   readonly blocked = input.required<number>();
@@ -43,6 +46,19 @@ export class AccountValue {
   protected readonly structureLabel = computed(
     () => 'Struktura rachunku: ' + this.slices().map((s) => `${s.label.toLowerCase()} ${s.percent}`).join(', '),
   );
+
+  /** Nic na rachunku i nic w historii akcji — zamiast zer pokazujemy, od czego zaczac. */
+  protected readonly empty = computed(() => {
+    const p = this.portfolio();
+    return (parseCents(p.summary.totalValue) ?? 0) === 0 && p.positions.length === 0 && p.closed.length === 0;
+  });
+
+  /** Przycisk z pustego rachunku prowadzi do pola kwoty w panelu przelewu obok. */
+  protected startDeposit(): void {
+    const amount = this.document.getElementById('amount');
+    amount?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    amount?.focus({ preventScroll: true });
+  }
 
   protected pick(code: string): void {
     this.picked.set(code);
