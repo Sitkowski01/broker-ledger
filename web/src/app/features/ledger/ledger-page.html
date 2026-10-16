@@ -54,7 +54,7 @@
     }
 
     @if (loading()) {
-      <p class="panel loading" aria-busy="true">Wczytywanie dokumentów…</p>
+      <bl-skeleton-panel title="Dokumenty" [rows]="3" />
     } @else if (next() !== null) {
       <button type="button" class="ghost more" (click)="loadMore()">Wczytaj starsze dokumenty</button>
     }

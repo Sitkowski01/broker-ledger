@@ -10,6 +10,7 @@ import { batched, ClientEvents, EVENT_BATCH_MS } from '../../core/events/client-
 import { QuoteFeed } from '../../core/market/quote-feed';
 import { OrderDto, ORDERS_URL } from '../../core/orders/order-api';
 import { PageHeader } from '../../shared/page-header';
+import { SkeletonPanel } from '../../shared/skeleton-panel';
 import { refreshDelay } from './order-model';
 import { OrderList } from './order-list';
 import { OrderTicket } from './order-ticket';
@@ -23,7 +24,7 @@ export const TICK_MS = 1_000;
 @Component({
   selector: 'bl-orders-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [PageHeader, OrderTicket, OrderList],
+  imports: [PageHeader, OrderTicket, OrderList, SkeletonPanel],
   template: `
     <bl-page-header kicker="Handel · sesja ciągła" title="Zlecenia" />
 
@@ -40,9 +41,10 @@ export const TICK_MS = 1_000;
         <bl-order-list class="list" [orders]="orders()!" [now]="now()" (changed)="reload()" />
       </div>
     } @else if (!loadError()) {
-      <section class="panel loading" aria-busy="true" aria-label="Wczytywanie zleceń">
-        <div class="bar"><h2>Moje zlecenia</h2><span class="meta">Wczytywanie…</span></div>
-      </section>
+      <div class="row">
+        <bl-skeleton-panel class="ticket" title="Nowe zlecenie" [rows]="4" />
+        <bl-skeleton-panel class="list" title="Moje zlecenia" [rows]="4" />
+      </div>
     }
   `,
   styles: `
@@ -70,9 +72,6 @@ export const TICK_MS = 1_000;
       align-items: center;
       justify-content: space-between;
       flex-wrap: wrap;
-    }
-    .loading {
-      min-height: 240px;
     }
   `,
 })

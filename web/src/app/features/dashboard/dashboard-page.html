@@ -26,7 +26,8 @@
     <bl-settlement-feed class="narrow" [entries]="feed()?.items ?? []" />
   </div>
 } @else if (!loadError()) {
-  <section class="panel loading" aria-busy="true" aria-label="Wczytywanie rachunku">
-    <div class="bar"><h2>Wartość rachunku</h2><span class="meta">Wczytywanie…</span></div>
-  </section>
+  <div class="row">
+    <bl-skeleton-panel class="wide" title="Wartość rachunku" [headline]="true" />
+    <bl-skeleton-panel class="narrow" title="Przelew" [rows]="2" />
+  </div>
 }

@@ -8,6 +8,7 @@ import { lastGood, loadErrorOf } from '../../core/api/last-good';
 import { batched, ClientEvents, SLOW_EVENT_BATCH_MS } from '../../core/events/client-events';
 import { longDate } from '../../core/format/dates';
 import { PageHeader } from '../../shared/page-header';
+import { SkeletonPanel } from '../../shared/skeleton-panel';
 import { AccountValue } from './account-value';
 import { PortfolioTable } from './portfolio-table';
 import { ResultChart } from './result-chart';
@@ -26,7 +27,7 @@ export const CLOCK_TICK_MS = 60_000;
 @Component({
   selector: 'bl-dashboard-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [PageHeader, AccountValue, ResultChart, TransferPanel, PortfolioTable, SettlementFeed],
+  imports: [PageHeader, AccountValue, ResultChart, TransferPanel, PortfolioTable, SettlementFeed, SkeletonPanel],
   templateUrl: './dashboard-page.html',
   styleUrl: './dashboard-page.css',
 })

@@ -10,6 +10,7 @@ import { lastGood } from '../../core/api/last-good';
 import { batched, ClientEvents, SLOW_EVENT_BATCH_MS } from '../../core/events/client-events';
 import { timeOf } from '../../core/format/dates';
 import { PageHeader } from '../../shared/page-header';
+import { SkeletonPanel } from '../../shared/skeleton-panel';
 import { byDay, docView, matchesSearch } from './ledger-model';
 import { LedgerDoc } from './ledger-doc';
 import { LedgerGuide } from './ledger-guide';
@@ -31,7 +32,7 @@ const FILTERS: readonly { key: HistoryKind | null; label: string }[] = [
 @Component({
   selector: 'bl-ledger-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [PageHeader, LedgerDoc, LedgerGuide, TAccountPanel, ReactiveFormsModule],
+  imports: [PageHeader, LedgerDoc, LedgerGuide, TAccountPanel, ReactiveFormsModule, SkeletonPanel],
   templateUrl: './ledger-page.html',
   styleUrl: './ledger-page.css',
 })

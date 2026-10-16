@@ -28,7 +28,3 @@
   justify-content: space-between;
   flex-wrap: wrap;
 }
-
-.loading {
-  min-height: 240px;
-}
