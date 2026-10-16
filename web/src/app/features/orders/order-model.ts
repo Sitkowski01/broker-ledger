@@ -115,3 +115,89 @@ export function sagaNote(o: OrderDto): string {
       return '';
   }
 }
+
+export type OrderFilter = 'all' | 'active' | 'done';
+
+export function matchesFilter(order: Pick<OrderDto, 'status'>, filter: OrderFilter): boolean {
+  return filter === 'all' || (filter === 'active') === isActive(order);
+}
+
+export interface OrderRow {
+  readonly id: string;
+  readonly symbol: string;
+  readonly side: OrderSide;
+  readonly sideLabel: string;
+  readonly typeLabel: string;
+  readonly limit: string;
+  readonly fill: string;
+  /** Szerokosc paska wykonania w CSS, np. "40%". */
+  readonly fillWidth: string;
+  readonly complete: boolean;
+  readonly status: string;
+  readonly tone: Tone;
+  /** Co jeszcze stoi pod zleceniem; po zwolnieniu blokady "—". */
+  readonly block: string;
+  readonly at: string;
+  readonly cancellable: boolean;
+}
+
+/** Wiersz listy zlecen: wszystko juz sformatowane, szablon tylko wyswietla. */
+export function orderRow(o: OrderDto, time: (iso: string) => string): OrderRow {
+  const status = statusOf(o);
+  const holding = o.fundsBlocked && !o.fundsReleased;
+  return {
+    id: o.id,
+    symbol: o.symbol,
+    side: o.side,
+    sideLabel: o.side === 'buy' ? 'Kupno' : 'Sprzedaż',
+    typeLabel: o.type === 'limit' ? 'Z limitem' : 'PKC',
+    limit: o.limitPrice ? formatPrice(o.limitPrice) : '—',
+    fill: `${formatQuantity(o.filledQuantity)} / ${formatQuantity(o.quantity)}`,
+    fillWidth: `${o.quantity > 0 ? Math.floor((o.filledQuantity * 100) / o.quantity) : 0}%`,
+    complete: o.filledQuantity >= o.quantity,
+    status: status.label,
+    tone: status.tone,
+    block: holding ? blockedText(o) : '—',
+    at: o.createdAt ? time(o.createdAt) : '—',
+    cancellable: canCancel(o),
+  };
+}
+
+/** Tytul osi przebiegu: "CDR · kupno 10 szt. po 250,00 zł". */
+export function orderTitle(o: OrderDto): string {
+  const side = o.side === 'buy' ? 'kupno' : 'sprzedaż';
+  const price = o.limitPrice ? ` po ${formatPrice(o.limitPrice)} zł` : ' PKC';
+  return `${o.symbol} · ${side} ${formatQuantity(o.quantity)} szt.${price}`;
+}
+
+/** Co ile odswiezac liste przy stanach przejsciowych — saga i reconciler koncza je w sekundy. */
+export const BUSY_REFRESH_MS = 3_000;
+/** Zlecenie przyjete potrafi czekac na gieldzie godzinami — wtedy wystarczy rzadziej. */
+export const RESTING_REFRESH_MS = 15_000;
+
+/**
+ * Po ilu ms od ostatniego odswiezenia zapytac znowu; null = nie pytac (wszystko zakonczone).
+ * Limit API to 120 zapytan na minute na klienta, wiec nie odpytujemy co 3 s zlecenia, ktore tylko czeka.
+ */
+export function refreshDelay(orders: readonly Pick<OrderDto, 'status' | 'fundsBlocked' | 'fundsReleased'>[]): number | null {
+  const busy = orders.some(
+    (o) => o.status === 'pending' || o.status === 'unknown' || o.status === 'cancelrequested' || (!isActive(o) && o.fundsBlocked && !o.fundsReleased),
+  );
+  if (busy) {
+    return BUSY_REFRESH_MS;
+  }
+  return orders.some(isActive) ? RESTING_REFRESH_MS : null;
+}
+
+/** Potwierdzenie po zlozeniu: co poszlo, ile zablokowano i co dalej. */
+export function placedMessage(o: OrderDto): string {
+  const what = `${o.symbol} · ${o.side === 'buy' ? 'kupno' : 'sprzedaż'} ${formatQuantity(o.quantity)} szt.`;
+  switch (o.status) {
+    case 'unknown':
+      return `${what}: giełda nie odpowiedziała na czas. Zablokowano ${blockedText(o)} — reconciler wyjaśni stan w tle.`;
+    case 'pending':
+      return `${what}: zlecenie w drodze. Zablokowano ${blockedText(o)}.`;
+    default:
+      return `${what}: przyjęte przez giełdę${o.exchangeOrderId ? ` (nr ${o.exchangeOrderId})` : ''}. Zablokowano ${blockedText(o)}.`;
+  }
+}

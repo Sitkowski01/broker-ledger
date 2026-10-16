@@ -1,7 +1,15 @@
 import {
+  blockedText,
+  BUSY_REFRESH_MS,
   canCancel,
   isActive,
+  matchesFilter,
+  orderRow,
+  orderTitle,
+  placedMessage,
+  refreshDelay,
   rejectionText,
+  RESTING_REFRESH_MS,
   sagaNote,
   sagaSteps,
   statusOf,
@@ -27,6 +35,8 @@ describe('order model', () => {
       const all = ['pending', 'unknown', 'accepted', 'cancelrequested', 'rejected', 'filled', 'cancelled'] as const;
       expect(all.filter((status) => isActive({ status }))).toEqual(['pending', 'unknown', 'accepted', 'cancelrequested']);
       expect(all.filter((status) => canCancel({ status }))).toEqual(['accepted']);
+      expect(all.filter((status) => matchesFilter({ status }, 'done'))).toEqual(['rejected', 'filled', 'cancelled']);
+      expect(all.every((status) => matchesFilter({ status }, 'all'))).toBe(true);
     });
 
     it('translates rejection reasons', () => {
@@ -95,4 +105,52 @@ describe('order model', () => {
     });
   });
 
+  it('formats a list row', () => {
+    expect(plain(orderRow(anOrder({ filledQuantity: 4 }), time))).toEqual({
+      id: anOrder().id,
+      symbol: 'CDR',
+      side: 'buy',
+      sideLabel: 'Kupno',
+      typeLabel: 'Z limitem',
+      limit: '250,00',
+      fill: '4 / 10',
+      fillWidth: '40%',
+      complete: false,
+      status: 'Częściowo',
+      tone: 'live',
+      block: '2 509,75 zł',
+      at: 't(17:43)',
+      cancellable: true,
+    });
+    const done = orderRow(anOrder({ type: 'market', limitPrice: null, side: 'sell', status: 'filled', filledQuantity: 10, fundsReleased: true, createdAt: null }), time);
+    expect([done.limit, done.block, done.at, done.typeLabel, done.sideLabel, done.complete]).toEqual(['—', '—', '—', 'PKC', 'Sprzedaż', true]);
+  });
+
+  it('titles an order', () => {
+    expect(orderTitle(anOrder())).toBe('CDR · kupno 10 szt. po 250,00 zł');
+    expect(plain(orderTitle(anOrder({ side: 'sell', limitPrice: null, quantity: 1200 })))).toBe('CDR · sprzedaż 1 200 szt. PKC');
+  });
+
+  it('says what was blocked and what happens next after placing', () => {
+    expect(plain(blockedText(anOrder()))).toBe('2 509,75 zł');
+    expect(plain(blockedText({ blockedAsset: 'CDR', blocked: '1200' }))).toBe('1 200 szt.');
+    expect(plain(placedMessage(anOrder()))).toBe('CDR · kupno 10 szt.: przyjęte przez giełdę (nr 7). Zablokowano 2 509,75 zł.');
+    expect(placedMessage(anOrder({ exchangeOrderId: null }))).toContain('przyjęte przez giełdę. Zablokowano');
+    expect(placedMessage(anOrder({ status: 'unknown' }))).toContain('reconciler wyjaśni stan w tle');
+    expect(placedMessage(anOrder({ status: 'pending', side: 'sell' }))).toContain('sprzedaż 10 szt.: zlecenie w drodze');
+  });
+});
+
+describe('refresh delay', () => {
+  it('asks often while the saga is moving, rarely for a resting order and never when all are done', () => {
+    expect(refreshDelay([])).toBeNull();
+    expect(refreshDelay([anOrder({ status: 'filled', fundsReleased: true })])).toBeNull();
+    expect(refreshDelay([anOrder()])).toBe(RESTING_REFRESH_MS);
+    expect(refreshDelay([anOrder(), anOrder({ status: 'unknown' })])).toBe(BUSY_REFRESH_MS);
+    expect(refreshDelay([anOrder({ status: 'pending' })])).toBe(BUSY_REFRESH_MS);
+    expect(refreshDelay([anOrder({ status: 'cancelrequested' })])).toBe(BUSY_REFRESH_MS);
+    // Zakonczone, ale reszta blokady jeszcze nie wrocila.
+    expect(refreshDelay([anOrder({ status: 'filled' })])).toBe(BUSY_REFRESH_MS);
+    expect(refreshDelay([anOrder({ status: 'rejected', fundsBlocked: false })])).toBeNull();
+  });
 });
