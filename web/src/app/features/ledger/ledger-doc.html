@@ -1,0 +1,68 @@
+<h3>
+  <button type="button" class="sum" [attr.aria-expanded]="open()" [attr.aria-controls]="'dok-' + doc().sequence" (click)="toggle.emit()">
+    <span class="pill tag" [class]="doc().tone">{{ doc().kind }}</span>
+    <span class="title">{{ doc().title }}</span>
+    <span class="num amount">{{ doc().amount }}</span>
+    <span class="num time">{{ time() }}</span>
+    <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+  </button>
+</h3>
+@if (open()) {
+  <div [id]="'dok-' + doc().sequence">
+    <div class="scroll">
+      <table>
+        <caption class="sr-only">Zapisy dokumentu nr {{ doc().sequence }}</caption>
+        <thead>
+          <tr><th scope="col">Konto</th><th scope="col" class="r">Wn</th><th scope="col" class="r">Ma</th></tr>
+        </thead>
+        <tbody>
+          @for (row of doc().rows; track $index) {
+            <tr>
+              <td>
+                <span class="account">
+                  <span class="pill owner" [class.mine]="row.mine">{{ row.owner }}</span>
+                  <span class="name" [class.mine]="row.mine">{{ row.name }}</span>
+                  <span class="num asset">{{ row.asset }}</span>
+                </span>
+              </td>
+              <td class="num r">{{ row.debit }}</td>
+              <td class="num r">{{ row.credit }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    <div class="foot">
+      @if (doc().balanced) {
+        <span class="ok">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M5 12l5 5L20 7" /></svg>
+          Zbilansowany
+        </span>
+      } @else {
+        <span class="partial">Część zapisów jest na rachunku innego klienta</span>
+      }
+      @for (s of doc().sums; track s) {
+        <span class="num chip">{{ s }}</span>
+      }
+      <span class="end">
+        <span class="num seq">#{{ doc().sequence }}</span>
+        @if (doc().key; as key) {
+          <span class="num key">{{ key }}</span>
+          <button type="button" class="icon-btn" (click)="copyKey(key)" [attr.aria-label]="'Kopiuj klucz ' + key">
+            @if (copied()) {
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M5 12l5 5L20 7" /></svg>
+            } @else {
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15V5a1 1 0 0 1 1-1h10" /></svg>
+            }
+          </button>
+        }
+        @if (doc().orderId; as order) {
+          <a class="order" routerLink="/zlecenia">
+            Zlecenie {{ shortId(order) }}
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+          </a>
+        }
+      </span>
+    </div>
+  </div>
+}
