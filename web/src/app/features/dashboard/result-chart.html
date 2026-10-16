@@ -1,0 +1,53 @@
+@if (chart(); as c) {
+  <figure aria-labelledby="chart-cap">
+    <div class="head">
+      <figcaption id="chart-cap">
+        <span class="micro title">Wynik rachunku</span>
+        <span class="sub">Bez wpłat i wypłat · od {{ c.since }}: <span class="num last" [class]="c.trend">{{ c.last }}</span></span>
+      </figcaption>
+      <div class="seg" role="group" aria-label="Zakres wykresu">
+        @for (r of ranges; track r.days) {
+          <button type="button" [attr.aria-pressed]="days() === r.days" (click)="days.set(r.days)">{{ r.label }}</button>
+        }
+      </div>
+    </div>
+    <div class="plot" [class]="c.trend">
+      <svg viewBox="0 0 300 100" preserveAspectRatio="none" aria-hidden="true">
+        <defs>
+          <linearGradient id="result-fill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" class="stop" stop-opacity="0.28" />
+            <stop offset="1" class="stop" stop-opacity="0" />
+          </linearGradient>
+        </defs>
+        <line x1="0" x2="300" y1="10" y2="10" class="grid" vector-effect="non-scaling-stroke" />
+        <line x1="0" x2="300" [attr.y1]="c.zeroY" [attr.y2]="c.zeroY" class="zero" vector-effect="non-scaling-stroke" />
+        <path [attr.d]="c.area" fill="url(#result-fill)" />
+        <path [attr.d]="c.line" class="stroke" vector-effect="non-scaling-stroke" />
+      </svg>
+      <span class="num axis-label" [style.top.%]="c.zeroY">0 zł</span>
+      <span class="num axis-label" style="top: 10%">{{ c.topLabel }}</span>
+      <div class="cols">
+        @for (p of c.points; track $index; let last = $last; let i = $index) {
+          <div class="col" [class.last]="last">
+            <span class="dot" [style.top.%]="p.y" [style.left.%]="p.left"></span>
+            <span class="tip num" [class.left]="i > c.points.length / 2">{{ p.day }}<br /><strong>{{ p.value }}</strong></span>
+          </div>
+        }
+      </div>
+    </div>
+    <div class="num axis">
+      <span>{{ c.axis[0] }}</span><span>{{ c.axis[1] }}</span><span>{{ c.axis[2] }}</span>
+    </div>
+    <table class="sr-only">
+      <caption>Wynik rachunku w kolejnych dniach</caption>
+      <thead><tr><th scope="col">Dzień</th><th scope="col">Wynik</th></tr></thead>
+      <tbody>
+        @for (p of c.points; track $index) {
+          <tr><td>{{ p.day }}</td><td>{{ p.value }}</td></tr>
+        }
+      </tbody>
+    </table>
+  </figure>
+} @else if (loaded()) {
+  <p class="empty">Wykres wyniku pojawi się po pierwszej wpłacie.</p>
+}
