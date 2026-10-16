@@ -10,6 +10,7 @@ import { DocView } from './ledger-model';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RouterLink],
   templateUrl: './ledger-doc.html',
+  styleUrl: './ledger-doc.css',
   host: { class: 'panel' },
 })
 export class LedgerDoc {
