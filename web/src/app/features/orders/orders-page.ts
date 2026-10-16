@@ -1,10 +1,12 @@
 import { DOCUMENT } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ACCOUNT_URLS, BalanceDto } from '../../core/account/account-api';
 import { cashOf, sharesOf } from '../../core/account/balances';
 import { toApiError } from '../../core/api/api-error';
 import { lastGood, loadErrorOf } from '../../core/api/last-good';
+import { batched, ClientEvents, EVENT_BATCH_MS } from '../../core/events/client-events';
 import { QuoteFeed } from '../../core/market/quote-feed';
 import { OrderDto, ORDERS_URL } from '../../core/orders/order-api';
 import { PageHeader } from '../../shared/page-header';
@@ -102,9 +104,12 @@ export class OrdersPage {
   });
 
   constructor() {
-    // Zlecenia w toku zmieniaja stan bez udzialu klienta (reconciler, transakcje z Kafki) — odswiezamy je,
-    // dopoki jakies zyje: czesto przy stanach przejsciowych, rzadko przy zleceniu czekajacym na gieldzie.
-    // Ukryta karta nie pyta wcale.
+    // Serwer mowi, kiedy cos sie zmienilo — seria sygnalow jednej sagi daje jedno odswiezenie.
+    const events = inject(ClientEvents);
+    events.events$.pipe(batched(EVENT_BATCH_MS), takeUntilDestroyed()).subscribe(() => this.reload());
+    // Zlecenia w toku zmieniaja stan bez udzialu klienta (reconciler, transakcje z Kafki). Gdy strumien nie dziala,
+    // odswiezamy je sami, dopoki jakies zyje: czesto przy stanach przejsciowych, rzadko przy zleceniu czekajacym
+    // na gieldzie. Ukryta karta nie pyta wcale.
     const document = inject(DOCUMENT);
     const timer = setInterval(() => {
       const now = new Date();
@@ -112,7 +117,7 @@ export class OrdersPage {
         this.now.set(now);
       }
       const delay = this.delay();
-      const due = delay !== null && Date.now() - this.lastReload >= delay;
+      const due = delay !== null && events.status() !== 'live' && Date.now() - this.lastReload >= delay;
       if (due && document.visibilityState !== 'hidden' && !this.ordersResource.isLoading()) {
         this.reload();
       }

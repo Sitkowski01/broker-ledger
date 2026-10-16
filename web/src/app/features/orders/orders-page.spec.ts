@@ -1,6 +1,9 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { Provider, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { Subject } from 'rxjs';
+import { ClientEvent, ClientEvents, EVENT_BATCH_MS } from '../../core/events/client-events';
 import { OrderDto } from '../../core/orders/order-api';
 import { BUSY_REFRESH_MS, RESTING_REFRESH_MS } from './order-model';
 import { OrdersPage } from './orders-page';
@@ -14,8 +17,8 @@ describe('OrdersPage', () => {
     { asset: 'CDR', kind: 'Shares', available: '60', blocked: '0' },
   ];
 
-  async function render() {
-    TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
+  async function render(providers: Provider[] = []) {
+    TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting(), ...providers] });
     backend = TestBed.inject(HttpTestingController);
     const fixture = TestBed.createComponent(OrdersPage);
     TestBed.tick();
@@ -72,6 +75,27 @@ describe('OrdersPage', () => {
     vi.advanceTimersByTime(RESTING_REFRESH_MS * 2);
     TestBed.tick();
     backend.expectNone((r) => r.url === '/api/me/orders');
+  });
+
+  it('reloads once per burst of server signals and does not poll while the stream is live', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+    const signals = new Subject<ClientEvent>();
+    const page = await render([{ provide: ClientEvents, useValue: { events$: signals, status: signal('live') } }]);
+    respond([anOrder({ status: 'unknown', exchangeOrderId: null })]);
+    await page.stable();
+
+    vi.advanceTimersByTime(BUSY_REFRESH_MS * 2);
+    TestBed.tick();
+    backend.expectNone((r) => r.url === '/api/me/orders');
+
+    // Blokada, przyjecie i transakcja przychodza seria — jedno odswiezenie.
+    signals.next({ kind: 'ledger' });
+    signals.next({ kind: 'order', orderId: anOrder().id, status: 'accepted' });
+    signals.next({ kind: 'ledger' });
+    vi.advanceTimersByTime(EVENT_BATCH_MS);
+    respond([anOrder()]);
+    await page.stable();
+    expect(page.el.querySelector('bl-order-list .status')?.textContent).toContain('Przyjęte');
   });
 
   it('reloads after a placed order', async () => {

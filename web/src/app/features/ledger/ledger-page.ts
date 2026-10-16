@@ -7,6 +7,7 @@ import { AccountApi, ACCOUNT_URLS, BalanceDto, HistoryEntryDto, HistoryKind } fr
 import { cashOf } from '../../core/account/balances';
 import { toApiError } from '../../core/api/api-error';
 import { lastGood } from '../../core/api/last-good';
+import { batched, ClientEvents, SLOW_EVENT_BATCH_MS } from '../../core/events/client-events';
 import { timeOf } from '../../core/format/dates';
 import { PageHeader } from '../../shared/page-header';
 import { byDay, docView, matchesSearch } from './ledger-model';
@@ -70,6 +71,21 @@ export class LedgerPage {
     this.load(null);
     this.loadToday();
     this.destroyRef.onDestroy(() => this.request?.unsubscribe());
+    inject(ClientEvents)
+      .events$.pipe(batched(SLOW_EVENT_BATCH_MS), takeUntilDestroyed())
+      .subscribe(() => this.refresh());
+  }
+
+  /**
+   * Nowy dokument w ksiedze: konto T zawsze od nowa, a lista tylko wtedy, gdy klient nie przewinal do starszych
+   * stron — nie zabieramy mu tego, co wlasnie czyta. Otwarte dokumenty zostaja otwarte.
+   */
+  private refresh(): void {
+    this.balancesResource.reload();
+    this.loadToday();
+    if (this.entries().length <= PAGE_SIZE && !this.loading()) {
+      this.load(null, true);
+    }
   }
 
   protected isOpen(sequence: number): boolean {
@@ -106,7 +122,7 @@ export class LedgerPage {
   }
 
   /** Pierwsza strona (before = null) zastepuje liste, kolejna dopisuje sie na koncu — kursor to numer dokumentu. */
-  private load(before: number | null): void {
+  private load(before: number | null, keepOpen = false): void {
     this.request?.unsubscribe();
     this.loading.set(true);
     this.error.set(null);
@@ -116,7 +132,7 @@ export class LedgerPage {
         this.loading.set(false);
         this.entries.update((list) => (before === null ? [...page.items] : [...list, ...page.items]));
         this.next.set(page.nextBefore);
-        if (before === null && page.items.length) {
+        if (before === null && page.items.length && !keepOpen) {
           // Najnowszy dokument od razu rozwiniety — widac, jak wyglada dokument Wn/Ma.
           this.opened.set(new Set([page.items[0].sequence]));
         }
