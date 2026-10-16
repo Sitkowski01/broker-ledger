@@ -4,6 +4,8 @@ import { TestBed } from '@angular/core/testing';
 import { Session } from '../auth/session';
 import { ClientEvent, ClientEvents, EVENTS_URL } from './client-events';
 
+const READY = ['event: ready', 'data: {}', '', ''].join(String.fromCharCode(10));
+
 describe('ClientEvents', () => {
   let backend: HttpTestingController;
 
@@ -72,6 +74,20 @@ describe('ClientEvents', () => {
     second.error(new ProgressEvent('error'));
     vi.advanceTimersByTime(1_000);
     backend.expectOne(EVENTS_URL);
+    subscription.unsubscribe();
+  });
+
+  it('connects at once when asked instead of waiting for the next try', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
+    const { events, subscription } = setup();
+    backend.expectOne(EVENTS_URL).flush('');
+    expect(events.nextAttemptAt()).toBe(Date.now() + 1_000);
+
+    events.reconnect();
+    const again = backend.expectOne(EVENTS_URL);
+    expect(events.nextAttemptAt()).toBeNull();
+    chunk(again, READY);
+    expect(events.lastHeardAt()).not.toBeNull();
     subscription.unsubscribe();
   });
 

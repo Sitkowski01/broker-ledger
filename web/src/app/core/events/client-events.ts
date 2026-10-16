@@ -1,7 +1,24 @@
 import { HttpClient, HttpDownloadProgressEvent, HttpEventType } from '@angular/common/http';
 import { inject, Injectable, signal } from '@angular/core';
 import { toObservable } from '@angular/core/rxjs-interop';
-import { asyncScheduler, defer, EMPTY, filter, map, mergeMap, Observable, of, retry, share, switchMap, tap, throttleTime, timer } from 'rxjs';
+import {
+  asyncScheduler,
+  defer,
+  EMPTY,
+  filter,
+  map,
+  mergeMap,
+  Observable,
+  of,
+  race,
+  retry,
+  share,
+  Subject,
+  switchMap,
+  tap,
+  throttleTime,
+  timer,
+} from 'rxjs';
 import { Session } from '../auth/session';
 import { parseSse } from './sse';
 
@@ -40,18 +57,31 @@ export class ClientEvents {
   private readonly http = inject(HttpClient);
   private readonly session = inject(Session);
   private readonly state = signal<StreamStatus>('offline');
+  private readonly lastHeard = signal<Date | null>(null);
+  private readonly nextTry = signal<number | null>(null);
+  private readonly retryNow$ = new Subject<void>();
 
   readonly status = this.state.asReadonly();
+  /** Kiedy ostatnio slyszelismy serwer — od tej chwili dane na ekranie moga byc nieaktualne. */
+  readonly lastHeardAt = this.lastHeard.asReadonly();
+  /** Kiedy (ms od epoki) bedzie kolejna proba polaczenia; null, gdy polaczenie jest albo nie czekamy. */
+  readonly nextAttemptAt = this.nextTry.asReadonly();
 
   readonly events$: Observable<ClientEvent> = toObservable(this.session.isActive).pipe(
-    switchMap((active) => (active ? this.connect() : (this.state.set('offline'), EMPTY))),
+    switchMap((active) => (active ? this.connect() : (this.state.set('offline'), this.nextTry.set(null), EMPTY))),
     share(),
   );
+
+  /** Polacz od razu, bez czekania na kolejna probe (przycisk "Sprobuj teraz"). */
+  reconnect(): void {
+    this.retryNow$.next();
+  }
 
   private connect(): Observable<ClientEvent> {
     let attempt = 0;
     return defer(() => {
       this.state.set('connecting');
+      this.nextTry.set(null);
       let received = 0;
       return this.http.get(EVENTS_URL, { observe: 'events', responseType: 'text', reportProgress: true }).pipe(
         filter((e): e is HttpDownloadProgressEvent => e.type === HttpEventType.DownloadProgress),
@@ -62,6 +92,7 @@ export class ClientEvents {
           return messages;
         }),
         mergeMap((messages) => of(...messages)),
+        tap(() => this.lastHeard.set(new Date())),
         mergeMap((message): Observable<ClientEvent> => {
           switch (message.event) {
             case 'ready':
@@ -85,7 +116,15 @@ export class ClientEvents {
     }).pipe(
       // Serwer zamknal strumien (np. restart) albo siec padla — probujemy dalej, coraz rzadziej.
       repeatAsRetry(),
-      retry({ delay: (_, count) => timer(Math.min(1_000 * 2 ** (count - 1), MAX_RETRY_MS)), resetOnSuccess: true }),
+      retry({
+        delay: (_, count) => {
+          const wait = Math.min(1_000 * 2 ** (count - 1), MAX_RETRY_MS);
+          this.nextTry.set(Date.now() + wait);
+          // "Sprobuj teraz" nie czeka do konca przerwy.
+          return race(timer(wait), this.retryNow$);
+        },
+        resetOnSuccess: true,
+      }),
     );
   }
 }
