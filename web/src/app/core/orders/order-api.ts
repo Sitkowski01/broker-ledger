@@ -62,6 +62,10 @@ export class OrderApi {
     );
   }
 
+  get(id: string): Observable<OrderDto> {
+    return this.http.get<OrderDto>(`${ORDERS_URL}/${id}`);
+  }
+
   cancel(id: string): Observable<OrderDto> {
     return this.http.delete<OrderDto>(`${ORDERS_URL}/${id}`);
   }
