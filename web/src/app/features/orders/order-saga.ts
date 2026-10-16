@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { shortDateTime } from '../../core/format/dates';
+import { shortId } from '../../core/format/ids';
 import { OrderDto } from '../../core/orders/order-api';
 import { orderTitle, sagaNote, sagaSteps } from './order-model';
 
@@ -52,7 +53,7 @@ export class OrderSaga {
   protected readonly title = computed(() => orderTitle(this.order()));
   protected readonly ids = computed(() => {
     const o = this.order();
-    return `zlecenie ${o.id.slice(0, 8)} · nr giełdy ${o.exchangeOrderId ?? '—'}`;
+    return `zlecenie ${shortId(o.id)} · nr giełdy ${o.exchangeOrderId ?? '—'}`;
   });
   protected readonly steps = computed(() => {
     const now = this.now();
