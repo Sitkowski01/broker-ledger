@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { StreamStatus } from '../core/events/client-events';
 
 export interface TickerItem {
   readonly label: string;
@@ -17,6 +18,8 @@ export interface TickerItem {
 })
 export class Ticker {
   readonly items = input<readonly TickerItem[]>([]);
+  /** Stan strumienia zdarzen: "Live" tylko wtedy, gdy naprawde slyszymy serwer. */
+  readonly status = input<StreamStatus>('live');
 
   /** Lista powtorzona tyle razy, zeby przesuniecie o polowe szerokosci dalo plynna petle. */
   protected readonly tape = computed(() => {

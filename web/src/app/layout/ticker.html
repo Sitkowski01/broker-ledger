@@ -10,4 +10,7 @@
     }
   </div>
 </div>
-<div class="status"><span class="live blink"></span>Live</div>
+<div class="status" [class]="'stream-' + status()" role="status">
+  <span class="live" [class.blink]="status() === 'live'" aria-hidden="true"></span>
+  {{ status() === 'live' ? 'Live' : status() === 'connecting' ? 'Łączę' : 'Offline' }}
+</div>

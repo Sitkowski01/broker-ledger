@@ -73,3 +73,13 @@
   letter-spacing: 0.15em;
   text-transform: uppercase;
 }
+
+.status.stream-connecting .live {
+  background: var(--warn);
+  box-shadow: 0 0 8px var(--warn);
+}
+
+.status.stream-offline .live {
+  background: var(--muted);
+  box-shadow: none;
+}
