@@ -48,6 +48,9 @@ export class QuoteFeed {
     { initialValue: [] as QuoteDto[] },
   );
 
+  /** Ostatnia cena kazdej spolki ("248.40") — do przycisku "Ostatnia" w formularzu zlecenia. */
+  readonly prices = computed<Readonly<Record<string, string>>>(() => Object.fromEntries(this.quotes().map((q) => [q.symbol, q.price])));
+
   readonly items = computed<QuoteItem[]>(() =>
     this.quotes().map((q) => ({
       label: q.symbol,

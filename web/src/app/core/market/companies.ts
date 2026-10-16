@@ -12,3 +12,6 @@ const COMPANIES: Readonly<Record<string, string>> = {
 export function companyName(symbol: string): string {
   return COMPANIES[symbol] ?? symbol;
 }
+
+/** Symbole w kolejnosci listy wyboru w formularzu zlecenia. */
+export const SYMBOLS: readonly string[] = Object.keys(COMPANIES);
