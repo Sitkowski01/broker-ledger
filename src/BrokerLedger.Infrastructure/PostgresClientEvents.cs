@@ -14,6 +14,17 @@ internal sealed record ClientEventsSettings(string ConnectionString, TimeSpan Re
 
     /// <summary>Ile niewyslanych sygnalow trzymamy na subskrybenta; przy wolnym kliencie gina najstarsze.</summary>
     public const int Buffer = 64;
+
+    /// <summary>Co ile sekund ciszy nasluch sprawdza, czy polaczenie zyje.</summary>
+    public const int KeepAliveSeconds = 30;
+
+    /// <summary>
+    /// Polaczenie do nasluchu z keepalive. WaitAsync bez niego czeka w nieskonczonosc na polaczeniu, ktore po cichu
+    /// umarlo (NAT, restart sieci bez RST): front widzi "na zywo", a sygnaly juz nie przychodza. Keepalive to wykrywa,
+    /// WaitAsync rzuca, a petla laczy sie od nowa i wysyla resync.
+    /// </summary>
+    public string ListenConnectionString() =>
+        new NpgsqlConnectionStringBuilder(ConnectionString) { KeepAlive = KeepAliveSeconds }.ConnectionString;
 }
 
 /// <summary>
@@ -108,7 +119,7 @@ internal sealed partial class PostgresClientEvents(ClientEventsSettings settings
 
     private async Task ListenAsync(CancellationToken stoppingToken)
     {
-        await using var connection = new NpgsqlConnection(settings.ConnectionString);
+        await using var connection = new NpgsqlConnection(settings.ListenConnectionString());
         await connection.OpenAsync(stoppingToken);
         connection.Notification += (_, notification) => Dispatch(notification.Payload);
         await using (var listen = new NpgsqlCommand($"LISTEN {ClientEventsSettings.Channel}", connection))

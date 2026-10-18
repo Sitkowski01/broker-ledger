@@ -37,6 +37,17 @@ public sealed class ClientEventsTests(PostgresFixture postgres) : IAsyncLifetime
     }
 
     [Fact]
+    public void Listening_connection_checks_that_it_is_still_alive()
+    {
+        var settings = new ClientEventsSettings("Host=db;Username=broker;Database=broker", TimeSpan.FromSeconds(1));
+
+        var listen = new Npgsql.NpgsqlConnectionStringBuilder(settings.ListenConnectionString());
+
+        Assert.Equal(ClientEventsSettings.KeepAliveSeconds, listen.KeepAlive);
+        Assert.Equal("db", listen.Host);
+    }
+
+    [Fact]
     public async Task A_document_on_the_clients_account_is_one_ledger_signal()
     {
         await using var events = _events.SubscribeAsync(_client, _stop.Token).GetAsyncEnumerator();
