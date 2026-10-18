@@ -30,13 +30,27 @@ internal sealed partial class PostgresClientEvents(ClientEventsSettings settings
     /// <summary>Ile razy nasluch sie polaczyl — testy czekaja na pierwsze polaczenie.</summary>
     public int Connections { get; private set; }
 
+    /// <summary>Ilu klientow ma otwarta subskrypcje — testy sprawdzaja, ze zamknieta nie zostaje w pamieci.</summary>
+    internal int SubscribedClients
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _subscribers.Count;
+            }
+        }
+    }
+
     public async IAsyncEnumerable<ClientEvent> SubscribeAsync(
         ClientId client, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
+        // Stryker disable once Statement : bez tego slownik nizej rzuca ten sam ArgumentNullException
         ArgumentNullException.ThrowIfNull(client);
         var channel = Channel.CreateBounded<ClientEvent>(new BoundedChannelOptions(ClientEventsSettings.Buffer)
         {
             FullMode = BoundedChannelFullMode.DropOldest,
+            // Stryker disable once Boolean : tylko podpowiedz dla optymalizacji kanalu, czyta zawsze jeden strumien
             SingleReader = true,
         });
         lock (_gate)
@@ -78,16 +92,16 @@ internal sealed partial class PostgresClientEvents(ClientEventsSettings settings
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
+                // Stryker disable once Statement : bez return petla i tak konczy sie na warunku while
                 return;
             }
-            // Stryker disable Block : w bloku jest tylko logowanie i przerwa przed ponowieniem
             catch (Exception e)
             {
                 // Baza na chwile niedostepna nie moze zatrzymac aplikacji — wyjatek z BackgroundService by to zrobil.
+                // Stryker disable once Statement : samo logowanie, bez wplywu na dzialanie
                 LogListenFailure(logger, e);
                 await Task.Delay(settings.RetryDelay, stoppingToken).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
             }
-            // Stryker restore Block
         }
     }
 

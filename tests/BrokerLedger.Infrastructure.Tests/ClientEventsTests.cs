@@ -1,4 +1,5 @@
 using BrokerLedger.Domain;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace BrokerLedger.Infrastructure.Tests;
@@ -114,6 +115,135 @@ public sealed class ClientEventsTests(PostgresFixture postgres) : IAsyncLifetime
 
         // Sygnal do klienta bez subskrybentow nie ma dokad trafic — i niczego nie psuje.
         _events.Dispatch($$"""{"client":"{{_client}}","kind":"ledger"}""");
+    }
+
+    [Fact]
+    public async Task Two_tabs_of_one_client_both_get_signals_and_closing_one_keeps_the_other()
+    {
+        using var firstTab = new CancellationTokenSource();
+        var first = _events.SubscribeAsync(_client, firstTab.Token).GetAsyncEnumerator(firstTab.Token);
+        await using var second = _events.SubscribeAsync(_client, _stop.Token).GetAsyncEnumerator();
+        var (firstNext, secondNext) = (first.MoveNextAsync().AsTask(), second.MoveNextAsync().AsTask());
+
+        _events.Dispatch(Ledger(_client));
+
+        Assert.True(await firstNext.WaitAsync(Wait));
+        Assert.True(await secondNext.WaitAsync(Wait));
+        await firstTab.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first.MoveNextAsync().AsTask());
+        await first.DisposeAsync();
+
+        _events.Dispatch(Ledger(_client));
+        Assert.True(await second.MoveNextAsync().AsTask().WaitAsync(Wait));
+        Assert.Equal(1, _events.SubscribedClients);
+    }
+
+    [Fact]
+    public async Task A_closed_last_subscription_leaves_nothing_behind()
+    {
+        using var tab = new CancellationTokenSource();
+        var events = _events.SubscribeAsync(_client, tab.Token).GetAsyncEnumerator(tab.Token);
+        var next = events.MoveNextAsync().AsTask();
+        Assert.Equal(1, _events.SubscribedClients);
+
+        await tab.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => next);
+        await events.DisposeAsync();
+
+        Assert.Equal(0, _events.SubscribedClients);
+    }
+
+    [Fact]
+    public async Task A_slow_subscriber_loses_the_oldest_signals_not_the_newest()
+    {
+        await using var events = _events.SubscribeAsync(_client, _stop.Token).GetAsyncEnumerator();
+        var started = events.MoveNextAsync().AsTask();
+        _events.Dispatch(Ledger(_client));
+        Assert.True(await started.WaitAsync(Wait));
+
+        // Klient nie czyta, a sygnalow przychodzi o jeden wiecej, niz miesci bufor.
+        var orders = Enumerable.Range(0, ClientEventsSettings.Buffer + 1).Select(_ => OrderId.New()).ToList();
+        orders.ForEach(order => _events.Dispatch(OrderSignal(_client, order)));
+
+        var received = new List<OrderId?>();
+        for (var i = 0; i < ClientEventsSettings.Buffer; i++)
+        {
+            Assert.True(await events.MoveNextAsync().AsTask().WaitAsync(Wait));
+            received.Add(events.Current.Order);
+        }
+        Assert.Equal(orders.Skip(1).Cast<OrderId?>(), received);
+    }
+
+    [Fact]
+    public async Task The_first_connection_is_not_a_resync()
+    {
+        await using var fresh = await StartedAsync(TimeSpan.FromMilliseconds(100), subscribeFirst: true);
+
+        fresh.Service.Dispatch(Ledger(_client));
+
+        Assert.True(await fresh.Next.WaitAsync(Wait));
+        Assert.Equal(ClientEventKind.Ledger, fresh.Events.Current.Kind);
+    }
+
+    [Fact]
+    public async Task After_a_lost_connection_it_waits_before_listening_again()
+    {
+        await using var slow = await StartedAsync(TimeSpan.FromHours(1), subscribeFirst: false);
+
+        await _db.ExecuteAsync("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE query LIKE 'LISTEN%' AND pid <> pg_backend_pid()");
+        await Until(() => slow.Logger.Warnings > 0);
+        await Task.Delay(300);
+
+        // Baza, ktora wlasnie padla, nie dostaje od razu kolejnej proby — nasluch czeka RetryDelay.
+        Assert.Equal(1, slow.Service.Connections);
+    }
+
+    private static string Ledger(ClientId client) => $$"""{"client":"{{client}}","kind":"ledger"}""";
+
+    private static string OrderSignal(ClientId client, OrderId order) =>
+        $$"""{"client":"{{client}}","kind":"order","order":"{{order}}","status":"Accepted"}""";
+
+    /// <summary>Osobny nasluch z wlasnym RetryDelay; z <paramref name="subscribeFirst"/> subskrypcja powstaje przed polaczeniem.</summary>
+    private async Task<Listener> StartedAsync(TimeSpan retryDelay, bool subscribeFirst)
+    {
+        var logger = new WarningCounter();
+        var service = new PostgresClientEvents(new ClientEventsSettings(_db.ConnectionString, retryDelay), logger);
+        var events = service.SubscribeAsync(_client, _stop.Token).GetAsyncEnumerator();
+        var next = subscribeFirst ? events.MoveNextAsync().AsTask() : Task.FromResult(false);
+        await service.StartAsync(_stop.Token);
+        await Until(() => service.Connections == 1);
+        return new Listener(service, logger, events, next);
+    }
+
+    private sealed record Listener(
+        PostgresClientEvents Service, WarningCounter Logger, IAsyncEnumerator<ClientEvent> Events, Task<bool> Next) : IAsyncDisposable
+    {
+        public async ValueTask DisposeAsync()
+        {
+            using var stop = new CancellationTokenSource();
+            await stop.CancelAsync();
+            await Service.StopAsync(stop.Token);
+            Service.Dispose();
+        }
+    }
+
+    private sealed class WarningCounter : ILogger<PostgresClientEvents>
+    {
+        private int _warnings;
+
+        public int Warnings => Volatile.Read(ref _warnings);
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel == LogLevel.Warning)
+            {
+                Interlocked.Increment(ref _warnings);
+            }
+        }
     }
 
     [Theory]

@@ -58,6 +58,7 @@ public sealed class PortfolioQueriesTests(PostgresFixture postgres) : IAsyncLife
         Assert.Equal(["deposit", "block", "purchase"], entries.Select(e => e.Description));
         Assert.Equal([Posting.Credit(AccountId.Available(_client, Pln), 1000m)], entries[0].Postings);
         await Assert.ThrowsAsync<ArgumentNullException>(() => _db.Queries().ClientEntriesAsync(null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => _db.Prices().PricesAtAsync(["CDR"], null!));
     }
 
     [Fact]

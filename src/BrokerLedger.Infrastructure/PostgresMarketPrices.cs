@@ -56,9 +56,11 @@ internal sealed class PostgresMarketPrices(IDbContextFactory<LedgerDbContext> co
     public async Task<IReadOnlyDictionary<string, IReadOnlyList<decimal?>>> PricesAtAsync(
         IReadOnlyCollection<string> symbols, IReadOnlyList<DateTimeOffset> times, CancellationToken cancellationToken = default)
     {
+        // Stryker disable once Statement : bez tego Distinct nizej rzuca ten sam ArgumentNullException
         ArgumentNullException.ThrowIfNull(symbols);
         ArgumentNullException.ThrowIfNull(times);
         var result = symbols.Distinct().ToDictionary(s => s, s => (IReadOnlyList<decimal?>)new decimal?[times.Count]);
+        // Stryker disable once Logical,Block : oszczedza tylko zapytanie — pusty unnest i tak nic nie zwraca
         if (result.Count == 0 || times.Count == 0)
         {
             return result;
