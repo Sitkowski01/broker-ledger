@@ -15,12 +15,13 @@ internal sealed class PostgresExchangeInbox(IDbContextFactory<LedgerDbContext> c
     public async Task<bool> AddAsync(ExchangeEvent exchangeEvent, CancellationToken cancellationToken = default)
     {
         var row = ToRow(exchangeEvent);
+        var now = clock.GetUtcNow();
         await using var db = await contexts.CreateDbContextAsync(cancellationToken);
         var inserted = await db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO exchange_inbox (run_id, symbol, sequence, type, maker_order_id, taker_order_id, taker_side,
-                                        price, order_id, reason, quantity, received_at)
+                                        price, order_id, reason, quantity, received_at, occurred_at)
             VALUES ({row.RunId}, {row.Symbol}, {row.Sequence}, {row.Type}, {row.MakerOrderId}, {row.TakerOrderId},
-                    {row.TakerSide?.ToString()}, {row.Price}, {row.OrderId}, {row.Reason}, {row.Quantity}, {clock.GetUtcNow()})
+                    {row.TakerSide?.ToString()}, {row.Price}, {row.OrderId}, {row.Reason}, {row.Quantity}, {now}, {exchangeEvent.OccurredAt ?? now})
             ON CONFLICT (run_id, symbol, sequence) DO NOTHING
             """, cancellationToken);
         return inserted == 1;
@@ -81,9 +82,10 @@ internal sealed class PostgresExchangeInbox(IDbContextFactory<LedgerDbContext> c
     private static ExchangeEvent ToEvent(InboxRow row)
     {
         var position = new EventPosition(row.RunId, row.Sequence);
-        return row.Type == Trade
+        ExchangeEvent restored = row.Type == Trade
             ? new ExchangeEvent.Trade(row.Symbol, position, row.MakerOrderId!.Value, row.TakerOrderId!.Value,
                 row.TakerSide!.Value, row.Price!.Value, row.Quantity)
             : new ExchangeEvent.Cancelled(row.Symbol, position, row.OrderId!.Value, row.Quantity, row.Reason!);
+        return restored with { OccurredAt = row.OccurredAt };
     }
 }

@@ -94,6 +94,10 @@ internal sealed class InboxRow
     public string? Reason { get; set; }
     public long Quantity { get; set; }
     public DateTimeOffset ReceivedAt { get; set; }
+
+    /// <summary>Czas zdarzenia na gieldzie; gdy gielda go nie podala — czas odbioru.</summary>
+    public DateTimeOffset OccurredAt { get; set; }
+
     public DateTimeOffset? SettledAt { get; set; }
 }
 

@@ -15,7 +15,8 @@ public class ParkietEventsTests
 
         var trade = Assert.IsType<ExchangeEvent.Trade>(ParkietEvents.Parse(json));
 
-        Assert.Equal(new ExchangeEvent.Trade("CDR", new EventPosition(3, 41), 7, 9, OrderSide.Sell, 250.40m, 12), trade);
+        Assert.Equal(new ExchangeEvent.Trade("CDR", new EventPosition(3, 41), 7, 9, OrderSide.Sell, 250.40m, 12)
+            { OccurredAt = new DateTimeOffset(2026, 10, 12, 10, 0, 0, TimeSpan.Zero) }, trade);
         Assert.Equal(OrderSide.Buy, Assert.IsType<ExchangeEvent.Trade>(ParkietEvents.Parse(json.Replace("SELL", "BUY", StringComparison.Ordinal))).TakerSide);
     }
 

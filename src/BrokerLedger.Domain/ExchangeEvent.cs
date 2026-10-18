@@ -43,6 +43,12 @@ public abstract record ExchangeEvent
     public string Symbol { get; }
     public EventPosition Position { get; }
 
+    /// <summary>
+    /// Kiedy zdarzenie stalo sie na gieldzie. Broker moze je dostac duzo pozniej (nadrabianie po przerwie,
+    /// czytanie tematu od poczatku), a wykres wyniku pyta o cene w chwili z przeszlosci — liczy sie czas gieldy.
+    /// </summary>
+    public DateTimeOffset? OccurredAt { get; init; }
+
     /// <summary>Numery zlecen gieldy, ktorych dotyczy zdarzenie — kazde moze byc zleceniem klienta brokera.</summary>
     public abstract IReadOnlyList<long> ExchangeOrderIds { get; }
 

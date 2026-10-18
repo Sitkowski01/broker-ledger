@@ -156,6 +156,10 @@ namespace BrokerLedger.Infrastructure.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("maker_order_id");
 
+                    b.Property<DateTimeOffset>("OccurredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at");
+
                     b.Property<long?>("OrderId")
                         .HasColumnType("bigint")
                         .HasColumnName("order_id");
@@ -222,7 +226,7 @@ namespace BrokerLedger.Infrastructure.Migrations
                         .HasDatabaseName("ix_exchange_inbox_last_trade")
                         .HasFilter("type = 'TRADE'");
 
-                    b.HasIndex("Symbol", "ReceivedAt")
+                    b.HasIndex("Symbol", "OccurredAt")
                         .HasDatabaseName("ix_exchange_inbox_trade_time")
                         .HasFilter("type = 'TRADE'");
 

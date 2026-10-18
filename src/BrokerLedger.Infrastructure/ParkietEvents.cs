@@ -14,7 +14,7 @@ internal static class ParkietEvents
 
     private sealed record Message(
         long? RunId, string? Symbol, long? Sequence, string? Type, long? OrderId, long? MakerOrderId,
-        long? TakerOrderId, string? TakerSide, long? Price, long? Quantity, string? Reason);
+        long? TakerOrderId, string? TakerSide, long? Price, long? Quantity, string? Reason, DateTimeOffset? Timestamp);
 
     /// <exception cref="FormatException">Wiadomosc nie jest poprawnym zdarzeniem gieldy.</exception>
     public static ExchangeEvent? Parse(string? json)
@@ -25,7 +25,7 @@ internal static class ParkietEvents
                           ?? throw new FormatException("empty message");
             var position = new EventPosition(Required(message.RunId, "runId"), Required(message.Sequence, "sequence"));
             var symbol = message.Symbol ?? throw new FormatException("symbol is missing");
-            return message.Type switch
+            ExchangeEvent? parsed = message.Type switch
             {
                 "TRADE" => new ExchangeEvent.Trade(symbol, position,
                     Required(message.MakerOrderId, "makerOrderId"), Required(message.TakerOrderId, "takerOrderId"),
@@ -35,6 +35,7 @@ internal static class ParkietEvents
                 null => throw new FormatException("type is missing"),
                 _ => null,
             };
+            return parsed is null ? null : parsed with { OccurredAt = message.Timestamp };
         }
         catch (Exception e) when (e is JsonException or ArgumentException)
         {

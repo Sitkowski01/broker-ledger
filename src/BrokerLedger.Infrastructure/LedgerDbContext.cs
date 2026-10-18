@@ -121,7 +121,7 @@ internal sealed class LedgerDbContext(DbContextOptions<LedgerDbContext> options)
             inbox.HasIndex(e => new { e.Symbol, e.Id }).HasDatabaseName("ix_exchange_inbox_last_trade")
                 .IsDescending(false, true).HasFilter("type = 'TRADE'");
             // Wykres wyniku pyta o cene w chwili z przeszlosci — ostatnia transakcja nie pozniejsza niz ta chwila.
-            inbox.HasIndex(e => new { e.Symbol, e.ReceivedAt }).HasDatabaseName("ix_exchange_inbox_trade_time")
+            inbox.HasIndex(e => new { e.Symbol, e.OccurredAt }).HasDatabaseName("ix_exchange_inbox_trade_time")
                 .HasFilter("type = 'TRADE'");
             inbox.ToTable(t =>
             {

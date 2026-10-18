@@ -16,11 +16,24 @@ public sealed class ExchangeInboxTests(PostgresFixture postgres) : IAsyncLifetim
 
     public Task DisposeAsync() => _db.DisposeAsync().AsTask();
 
+    private static readonly DateTimeOffset At = new(2026, 10, 12, 10, 0, 0, TimeSpan.Zero);
+
     private static ExchangeEvent.Trade Trade(long sequence, string symbol = "CDR", long run = 1) =>
-        new(symbol, new EventPosition(run, sequence), 4, 9, OrderSide.Sell, 250.40m, 3);
+        new(symbol, new EventPosition(run, sequence), 4, 9, OrderSide.Sell, 250.40m, 3) { OccurredAt = At };
 
     private static ExchangeEvent.Cancelled Cancel(long sequence, string symbol = "CDR") =>
-        new(symbol, new EventPosition(1, sequence), 4, 6, "NO_LIQUIDITY");
+        new(symbol, new EventPosition(1, sequence), 4, 6, "NO_LIQUIDITY") { OccurredAt = At };
+
+    [Fact]
+    public async Task Event_without_an_exchange_time_gets_the_time_it_arrived()
+    {
+        var before = DateTimeOffset.UtcNow.AddSeconds(-1);
+        await _inbox.AddAsync(Trade(1) with { OccurredAt = null });
+
+        var stored = Assert.Single(await _inbox.PendingAsync(10)).OccurredAt;
+
+        Assert.InRange(stored!.Value, before, DateTimeOffset.UtcNow.AddSeconds(1));
+    }
 
     [Fact]
     public async Task Reads_back_both_kinds_of_events_in_arrival_order()

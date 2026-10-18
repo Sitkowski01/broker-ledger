@@ -82,6 +82,21 @@ public sealed class PortfolioQueriesTests(PostgresFixture postgres) : IAsyncLife
         Assert.Equal([], (await _db.Prices().PricesAtAsync(["CDR"], []))["CDR"]);
     }
 
+    [Fact]
+    public async Task Price_at_a_moment_goes_by_the_exchange_time_not_by_when_the_broker_got_it()
+    {
+        // Broker nadrabia po przerwie: transakcje z rana przychodza wieczorem.
+        var morning = new DateTimeOffset(2026, 10, 16, 8, 0, 0, TimeSpan.Zero);
+        var inbox = _db.Inbox(new SettableClock(morning.AddHours(10)));
+        await inbox.AddAsync(Trade("CDR", 1, 250m) with { OccurredAt = morning });
+        await inbox.AddAsync(Trade("CDR", 2, 260m) with { OccurredAt = morning.AddHours(2) });
+
+        var prices = await _db.Prices().PricesAtAsync(["CDR"], [morning.AddHours(1), morning.AddHours(3)]);
+
+        Assert.Equal([250m, 260m], prices["CDR"]);
+        Assert.Equal(morning.AddHours(2), (await _db.Prices().LastPricesAsync(["CDR"]))["CDR"].At);
+    }
+
     private sealed class SettableClock(DateTimeOffset now) : TimeProvider
     {
         public DateTimeOffset Now { get; set; } = now;

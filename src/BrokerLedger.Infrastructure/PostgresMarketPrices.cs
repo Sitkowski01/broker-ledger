@@ -29,7 +29,7 @@ internal sealed class PostgresMarketPrices(IDbContextFactory<LedgerDbContext> co
                 """)
             .AsNoTracking()
             .ToListAsync(cancellationToken);
-        return rows.ToDictionary(r => r.Symbol, r => new MarketPrice(r.Price!.Value, r.ReceivedAt));
+        return rows.ToDictionary(r => r.Symbol, r => new MarketPrice(r.Price!.Value, r.OccurredAt));
     }
 
     public async Task<IReadOnlyList<Quote>> QuotesAsync(int limit, CancellationToken cancellationToken = default)
@@ -38,10 +38,10 @@ internal sealed class PostgresMarketPrices(IDbContextFactory<LedgerDbContext> co
         await using var db = await contexts.CreateDbContextAsync(cancellationToken);
         // Dla kazdej spolki dwa skoki po indeksie (symbol, id DESC): ostatnia transakcja i ta tuz przed nia.
         var rows = await db.Database.SqlQuery<QuoteRow>($"""
-                SELECT s.symbol, t.price, p.price AS previous_price, t.received_at AS at
+                SELECT s.symbol, t.price, p.price AS previous_price, t.occurred_at AS at
                 FROM (SELECT DISTINCT symbol FROM exchange_inbox WHERE type = 'TRADE') s
                 CROSS JOIN LATERAL (
-                    SELECT id, price, received_at FROM exchange_inbox
+                    SELECT id, price, occurred_at FROM exchange_inbox
                     WHERE type = 'TRADE' AND symbol = s.symbol ORDER BY id DESC LIMIT 1) t
                 LEFT JOIN LATERAL (
                     SELECT price FROM exchange_inbox
@@ -68,12 +68,12 @@ internal sealed class PostgresMarketPrices(IDbContextFactory<LedgerDbContext> co
         await using var db = await contexts.CreateDbContextAsync(cancellationToken);
         var symbolList = result.Keys.ToArray();
         var timeList = times.Select(t => t.ToUniversalTime()).ToArray();
-        // Kazda para (spolka, chwila) to jeden skok po indeksie (symbol, received_at) — bez czytania calej historii.
+        // Kazda para (spolka, chwila) to jeden skok po indeksie (symbol, occurred_at) — bez czytania calej historii.
         var rows = await db.Database.SqlQuery<PriceAtRow>($"""
                 SELECT s.symbol, t.ord::int AS position,
                        (SELECT i.price FROM exchange_inbox i
-                        WHERE i.type = 'TRADE' AND i.symbol = s.symbol AND i.received_at <= t.at
-                        ORDER BY i.received_at DESC LIMIT 1) AS price
+                        WHERE i.type = 'TRADE' AND i.symbol = s.symbol AND i.occurred_at <= t.at
+                        ORDER BY i.occurred_at DESC LIMIT 1) AS price
                 FROM unnest({symbolList}) AS s(symbol)
                 CROSS JOIN unnest({timeList}) WITH ORDINALITY AS t(at, ord)
                 """)
