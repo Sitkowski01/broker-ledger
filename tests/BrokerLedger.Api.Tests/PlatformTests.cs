@@ -20,7 +20,19 @@ public sealed class PlatformTests(BrokerApi api)
         Assert.Contains("/api/me/orders", paths);
         Assert.Contains("/api/me/events", paths);
         Assert.Contains("/api/me/performance", paths);
-        Assert.Equal("bearer", document.GetProperty("components").GetProperty("securitySchemes").GetProperty("Bearer").GetProperty("scheme").GetString());
+        var info = document.GetProperty("info");
+        Assert.Equal(("broker-ledger", "v1"), (info.GetProperty("title").GetString(), info.GetProperty("version").GetString()));
+        Assert.StartsWith("Dom maklerski przed gielda Parkiet", info.GetProperty("description").GetString(), StringComparison.Ordinal);
+        Assert.Contains("Idempotency-Key", info.GetProperty("description").GetString(), StringComparison.Ordinal);
+        var components = document.GetProperty("components");
+        var bearer = components.GetProperty("securitySchemes").GetProperty("Bearer");
+        Assert.Equal(("http", "bearer", "JWT"),
+            (bearer.GetProperty("type").GetString(), bearer.GetProperty("scheme").GetString(), bearer.GetProperty("bearerFormat").GetString()));
+        Assert.Contains("/api/auth/login", bearer.GetProperty("description").GetString(), StringComparison.Ordinal);
+        // Wymaganie tokenu dla calego dokumentu — Swagger UI po Authorize wysyla go z kazdym zapytaniem.
+        Assert.True(Assert.Single(document.GetProperty("security").EnumerateArray()).TryGetProperty("Bearer", out _));
+        // Schematy cial zapytan zostaja obok dopisanego schematu tokenu.
+        Assert.True(components.GetProperty("schemas").EnumerateObject().Any());
         Assert.Equal(HttpStatusCode.OK, docs.StatusCode);
         Assert.Contains("swagger-ui-dist@5.32.15", await docs.Content.ReadAsStringAsync(), StringComparison.Ordinal);
     }

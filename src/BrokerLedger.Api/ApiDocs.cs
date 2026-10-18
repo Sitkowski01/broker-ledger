@@ -22,7 +22,8 @@ internal static class ApiDocs
                     + "Kwoty jako tekst (\"250.40\"), operacje zmieniajace srodki wymagaja naglowka Idempotency-Key.",
             };
             document.Components ??= new OpenApiComponents();
-            document.Components.SecuritySchemes ??= new Dictionary<string, IOpenApiSecurityScheme>();
+            // Stryker disable once Assignment : innych schematow tokenu w dokumencie nie ma, wiec "=" daje to samo
+            document.Components.SecuritySchemes ??=new Dictionary<string, IOpenApiSecurityScheme>();
             document.Components.SecuritySchemes["Bearer"] = new OpenApiSecurityScheme
             {
                 Type = SecuritySchemeType.Http,
