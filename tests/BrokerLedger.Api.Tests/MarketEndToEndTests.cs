@@ -18,13 +18,15 @@ public sealed class MarketEndToEndTests(BrokerApi api)
         await TradeAsync("AAQTA", 100m);
         await TradeAsync("AAQTA", 101.50m);
         await TradeAsync("AAQTB", 40m);
+        await TradeAsync("AAQTC", 20m);
+        await TradeAsync("AAQTC", 19.99m);
 
         var response = await http.GetAsync(Quotes);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var quotes = (await response.JsonAsync()).EnumerateArray().Where(q => q.GetProperty("symbol").GetString()!.StartsWith("AAQT", StringComparison.Ordinal)).ToList();
         Assert.Equal(
-            [("AAQTA", "101.50", "100.00", "up"), ("AAQTB", "40.00", null, "flat")],
+            [("AAQTA", "101.50", "100.00", "up"), ("AAQTB", "40.00", null, "flat"), ("AAQTC", "19.99", "20.00", "down")],
             quotes.Select(q => (q.GetProperty("symbol").GetString(), q.GetProperty("price").GetString(),
                 q.GetProperty("previousPrice").GetString(), q.GetProperty("direction").GetString())));
         Assert.Equal(JsonValueKind.String, quotes[0].GetProperty("at").ValueKind);

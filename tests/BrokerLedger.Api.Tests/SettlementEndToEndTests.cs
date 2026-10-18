@@ -37,6 +37,31 @@ public sealed class SettlementEndToEndTests(KafkaBrokerApi api)
     }
 
     [Fact]
+    public async Task History_shows_trades_and_blocks_with_the_brokers_accounts()
+    {
+        using var http = await FundedClientAsync();
+        var buy = await PlaceAsync(http, new { symbol = "PEO", side = "buy", type = "limit", limitPrice = "100.00", quantity = 10 });
+        await api.TradeAsync("PEO", Stranger, ExchangeId(buy), "BUY", 90_00, 10);
+        await WaitForStatusAsync(http, buy, "filled");
+        var sell = await PlaceAsync(http, new { symbol = "PEO", side = "sell", type = "limit", limitPrice = "95.00", quantity = 10 });
+        await api.TradeAsync("PEO", ExchangeId(sell), Stranger, "BUY", 95_00, 10);
+        await WaitForStatusAsync(http, sell, "filled");
+
+        var trades = await HistoryAsync(http, "trades");
+        var blocks = await HistoryAsync(http, "blocks");
+
+        Assert.Equal(["sale", "purchase"], trades.Select(e => Text(e, "description")));
+        Assert.Equal(["block", "release", "block"], blocks.Select(e => Text(e, "description")));
+        // Kupno: klient placi z blokady, bank brokera dostaje wartosc, akcje wychodza z depozytu, prowizja to przychod brokera.
+        Assert.Equal(
+            [("client", "blocked", "PLN", "debit", "903.51"), ("broker", "bank", "PLN", "credit", "900.00"),
+             ("broker", "depository", "PEO", "debit", "10"), ("client", "available", "PEO", "credit", "10"),
+             ("broker", "feeIncome", "PLN", "credit", "3.51")],
+            trades[1].GetProperty("postings").EnumerateArray().Select(p => (Text(p, "owner"), Text(p, "account"),
+                Text(p, "asset"), Text(p, "side"), Text(p, "amount"))));
+    }
+
+    [Fact]
     public async Task Partly_filled_sell_cancelled_on_request_gets_the_rest_of_the_shares_back()
     {
         using var http = await FundedClientAsync(shares: ("PKO", 20));
@@ -156,6 +181,10 @@ public sealed class SettlementEndToEndTests(KafkaBrokerApi api)
     }
 
     private long ExchangeId(Guid order) => api.Parkiet.ExchangeIdOf(order);
+
+    private static async Task<List<JsonElement>> HistoryAsync(HttpClient http, string kind) =>
+        (await (await http.GetAsync(new Uri($"/api/me/history?kind={kind}", UriKind.Relative))).JsonAsync())
+        .GetProperty("items").EnumerateArray().ToList();
 
     private async Task<HttpClient> FundedClientAsync((string Symbol, long Quantity)? shares = null)
     {
