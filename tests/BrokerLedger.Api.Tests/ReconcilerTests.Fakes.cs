@@ -54,12 +54,13 @@ public partial class ReconcilerTests
     {
         public int Calls { get; private set; }
         public bool ThrowCancelled { get; init; }
+        public bool Silent { get; init; }
 
         public Task<ExchangeReply> PlaceAsync(Order order, CancellationToken cancellationToken = default)
         {
             Calls++;
             cancellationToken.ThrowIfCancellationRequested();
-            return Task.FromResult<ExchangeReply>(new ExchangeReply.Accepted(Calls, 1));
+            return Task.FromResult<ExchangeReply>(Silent ? new ExchangeReply.NoAnswer("timeout") : new ExchangeReply.Accepted(Calls, 1));
         }
 
         public Task<CancelReply> CancelAsync(Order order, CancellationToken cancellationToken = default) => throw new NotSupportedException();

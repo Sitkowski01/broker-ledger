@@ -1,6 +1,7 @@
 using BrokerLedger.Api.Orders;
 using BrokerLedger.Domain;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
@@ -71,7 +72,24 @@ public partial class ReconcilerTests
             (new ReconcilerOptions().Interval, new ReconcilerOptions().MinAge, new ReconcilerOptions().BatchSize, new ReconcilerOptions().Enabled));
     }
 
-    private static OrderReconciler Reconciler(Orders orders, Exchange exchange, TimeSpan? minAge = null, int batch = 50, bool enabled = true)
+    [Fact]
+    public async Task Order_that_stays_unknown_is_reported_every_few_attempts()
+    {
+        var orders = new Orders(Unknown());
+        var logger = new Warnings();
+        var reconciler = Reconciler(orders, new Exchange { Silent = true }, logger: logger);
+
+        for (var pass = 1; pass <= 2 * OrderReconciler.StuckWarningEvery; pass++)
+        {
+            await reconciler.RunOnceAsync();
+        }
+
+        Assert.Equal(2, logger.Count);
+        Assert.Equal(OrderStatus.Unknown, orders.All[0].Status);
+    }
+
+    private static OrderReconciler Reconciler(Orders orders, Exchange exchange, TimeSpan? minAge = null, int batch = 50, bool enabled = true,
+        ILogger<OrderReconciler>? logger = null)
     {
         var services = new ServiceCollection()
             .AddSingleton<IOrderRepository>(orders)
@@ -81,7 +99,20 @@ public partial class ReconcilerTests
             .BuildServiceProvider();
         var options = Options.Create(new ReconcilerOptions { MinAge = minAge ?? TimeSpan.Zero, BatchSize = batch, Enabled = enabled });
         return new OrderReconciler(services.GetRequiredService<IServiceScopeFactory>(), options, new FixedClock(Now),
-            NullLogger<OrderReconciler>.Instance);
+            logger ?? NullLogger<OrderReconciler>.Instance);
+    }
+
+    /// <summary>Liczy ostrzezenia — reszta logu nie ma tu znaczenia.</summary>
+    private sealed class Warnings : ILogger<OrderReconciler>
+    {
+        public int Count { get; private set; }
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+            Count += logLevel == LogLevel.Warning ? 1 : 0;
     }
 
     private static Order Unknown()

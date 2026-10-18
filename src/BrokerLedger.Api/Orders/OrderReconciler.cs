@@ -11,6 +11,9 @@ internal sealed partial class OrderReconciler(
     IServiceScopeFactory scopes, IOptions<ReconcilerOptions> options, TimeProvider clock, ILogger<OrderReconciler> logger)
     : BackgroundService
 {
+    /// <summary>Co ile prob o zleceniu, ktore wciaz jest "nieznane", ostrzegamy w logu.</summary>
+    internal const int StuckWarningEvery = 10;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var settings = options.Value;
@@ -58,8 +61,14 @@ internal sealed partial class OrderReconciler(
         {
             try
             {
-                await saga.ProgressAsync(order, cancellationToken);
+                var result = await saga.ProgressAsync(order, cancellationToken);
                 progressed++;
+                // Nieznane zlecenie wstrzymuje rozliczanie calej spolki (transakcja moze byc jego), wiec nie moze
+                // wisiec po cichu — np. gdy gielda w kolko odpowiada 409 albo bez numeru zlecenia.
+                if (result.Status == OrderStatus.Unknown && result.SubmitAttempts % StuckWarningEvery == 0)
+                {
+                    LogStuck(logger, result.Id.Value, result.Request.Symbol, result.SubmitAttempts);
+                }
             }
             catch (OrderConcurrencyException)
             {
@@ -76,6 +85,10 @@ internal sealed partial class OrderReconciler(
         }
         return progressed;
     }
+
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "Order {OrderId} on {Symbol} is still unknown after {Attempts} attempts; settlement of this company waits for it")]
+    private static partial void LogStuck(ILogger logger, Guid orderId, string symbol, int attempts);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Reconciliation pass failed")]
     private static partial void LogPassFailure(ILogger logger, Exception exception);
