@@ -136,6 +136,46 @@ public class PerformanceTests
     }
 
     [Fact]
+    public void The_chart_starts_at_the_first_document_when_the_account_is_younger_than_the_range()
+    {
+        Post(JournalEntries.Deposit(_client, Money.Pln(10m)), 30);
+        Post(JournalEntries.Deposit(_client, Money.Pln(10m)), 2);
+        var now = Start.AddDays(3);
+
+        var times = Performance.TimesFor(_history, now, 7);
+
+        // Od dnia pierwszego dokumentu (14.10), nie od pozniejszego i nie tydzien wstecz.
+        Assert.Equal([new DateTimeOffset(2026, 10, 14, 21, 59, 59, TimeSpan.Zero).AddTicks(9_999_999)], times.Take(1));
+        Assert.Equal(4, times.Count);
+        Assert.Equal(now, times[^1]);
+    }
+
+    [Fact]
+    public void The_chart_of_an_older_account_shows_only_the_range()
+    {
+        Post(JournalEntries.Deposit(_client, Money.Pln(10m)), 0);
+        var now = Start.AddDays(40);
+
+        var times = Performance.TimesFor(_history, now, 30);
+
+        // Od konca dnia 24.10 ("teraz" minus 30 dni) do 22.11, a na koncu "teraz" 23.11.
+        Assert.Equal(31, times.Count);
+        Assert.Equal(new DateTimeOffset(2026, 10, 24, 21, 59, 59, TimeSpan.Zero).AddTicks(9_999_999), times[0]);
+    }
+
+    [Fact]
+    public void Prices_are_needed_only_for_companies_the_client_ever_held()
+    {
+        Post(JournalEntries.Deposit(_client, Money.Pln(1000m)), 0);
+        Post(JournalEntries.SharesTransferIn(_client, "PKN", 5), 1);
+        Post(JournalEntries.Block(_client, Pln, 1000m), 2);
+        Post(JournalEntries.Purchase(_client, "CDR", 1, 500m, 0m), 3);
+        Post(JournalEntries.Purchase(_client, "CDR", 1, 500m, 0m), 4);
+
+        Assert.Equal(["PKN", "CDR"], Performance.SymbolsIn(_history));
+    }
+
+    [Fact]
     public void Rejects_missing_arguments()
     {
         Assert.Throws<ArgumentNullException>(() => Performance.Sample(null!, [], (_, _) => null));

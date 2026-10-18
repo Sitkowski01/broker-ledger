@@ -69,6 +69,25 @@ public static class Performance
     }
 
     /// <summary>
+    /// Chwile wykresu za ostatnie <paramref name="days"/> dni, ale nie sprzed pierwszego dokumentu klienta — przed nim
+    /// rachunku nie bylo, wiec probki bylyby samymi zerami.
+    /// </summary>
+    public static IReadOnlyList<DateTimeOffset> TimesFor(IReadOnlyCollection<HistoryEntry> entries, DateTimeOffset now, int days)
+    {
+        var opened = entries.Min(e => e.CreatedAt);
+        var start = now.AddDays(-days);
+        // Stryker disable once Equality : przy rownych chwilach obie galezie daja to samo
+        return DailyTimes(opened > start ? opened : start, now, ExchangeZone);
+    }
+
+    /// <summary>Spolki, ktore klient kiedykolwiek mial — tylko dla nich wykres potrzebuje cen.</summary>
+    public static IReadOnlyList<string> SymbolsIn(IEnumerable<HistoryEntry> entries)
+    {
+        return entries.SelectMany(e => e.Postings).Select(p => p.Account.Asset)
+            .Where(a => a.Kind == AssetKind.Shares).Select(a => a.Code).Distinct().ToList();
+    }
+
+    /// <summary>
     /// Probki raz dziennie (koniec dnia w strefie gieldy) od <paramref name="from"/> do <paramref name="now"/>;
     /// ostatnia probka to zawsze "teraz", zeby wykres konczyl sie tam, gdzie wartosc rachunku na Pulpicie.
     /// </summary>

@@ -32,5 +32,6 @@ public sealed class PerformanceEndToEndTests(BrokerApi api)
 
         Assert.Equal(0, empty.GetProperty("points").GetArrayLength());
         Assert.Equal(HttpStatusCode.BadRequest, odd.StatusCode);
+        Assert.Equal("days must be 7 or 30", (await odd.JsonAsync()).GetProperty("errors").GetProperty("days")[0].GetString());
     }
 }

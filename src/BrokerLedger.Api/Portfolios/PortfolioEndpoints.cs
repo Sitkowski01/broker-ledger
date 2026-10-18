@@ -38,13 +38,8 @@ internal static class PortfolioEndpoints
         {
             return Results.Ok(new { points = Array.Empty<object>() });
         }
-        var now = clock.GetUtcNow();
-        var opened = entries.Min(e => e.CreatedAt);
-        var from = opened > now.AddDays(-range) ? opened : now.AddDays(-range);
-        var times = Performance.DailyTimes(from, now, Performance.ExchangeZone);
-        var symbols = entries.SelectMany(e => e.Postings).Select(p => p.Account.Asset)
-            .Where(a => a.Kind == AssetKind.Shares).Select(a => a.Code).Distinct().ToList();
-        var priceTable = await prices.PricesAtAsync(symbols, times, ct);
+        var times = Performance.TimesFor(entries, clock.GetUtcNow(), range);
+        var priceTable = await prices.PricesAtAsync(Performance.SymbolsIn(entries), times, ct);
         var points = Performance.Sample(entries, times, (symbol, i) => priceTable[symbol][i]);
         return Results.Ok(new
         {
