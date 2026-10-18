@@ -36,10 +36,18 @@ internal sealed class PostgresMarketPrices(IDbContextFactory<LedgerDbContext> co
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
         await using var db = await contexts.CreateDbContextAsync(cancellationToken);
-        // Dla kazdej spolki dwa skoki po indeksie (symbol, id DESC): ostatnia transakcja i ta tuz przed nia.
+        // Spolki przeskakujemy po indeksie (symbol, id DESC): kazda kolejna to jeden skok do nastepnego symbolu.
+        // SELECT DISTINCT czytalby cala skrzynke, a ona rosnie o kazda transakcje gieldy.
+        // Dla kazdej spolki jeszcze dwa skoki: ostatnia transakcja i ta tuz przed nia.
         var rows = await db.Database.SqlQuery<QuoteRow>($"""
+                WITH RECURSIVE s(symbol) AS (
+                    (SELECT symbol FROM exchange_inbox WHERE type = 'TRADE' ORDER BY symbol LIMIT 1)
+                    UNION ALL
+                    SELECT (SELECT i.symbol FROM exchange_inbox i
+                            WHERE i.type = 'TRADE' AND i.symbol > s.symbol ORDER BY i.symbol LIMIT 1)
+                    FROM s WHERE s.symbol IS NOT NULL)
                 SELECT s.symbol, t.price, p.price AS previous_price, t.occurred_at AS at
-                FROM (SELECT DISTINCT symbol FROM exchange_inbox WHERE type = 'TRADE') s
+                FROM s
                 CROSS JOIN LATERAL (
                     SELECT id, price, occurred_at FROM exchange_inbox
                     WHERE type = 'TRADE' AND symbol = s.symbol ORDER BY id DESC LIMIT 1) t
