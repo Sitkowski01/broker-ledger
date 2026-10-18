@@ -468,7 +468,8 @@ Na Windowsie z zainstalowanym Visual Studio 2022 Stryker bierze jego starszy MSB
 ## Ekosystem
 
 To repozytorium jest częścią zestawu projektów wokół giełdy. Każdy działa i testuje się
-osobno, a razem tworzą dwa przepływy: **handel** (broker ↔ giełda) i **alerty cenowe**.
+osobno, a razem tworzą dwa przepływy zasilane przez giełdę Parkiet: **handel** (broker ↔ giełda)
+i **alerty cenowe** (transakcje giełdy → progi alertów).
 
 ```
 HANDEL
@@ -480,18 +481,18 @@ HANDEL
                  └──── transakcje (Kafka: exchange.events) ◄──────────────┘
 
 ALERTY CENOWE
- notowania ──► Kafka: quotes ──► quote-stream-kafka ──► price-alerts-api ◄── price-alerts-web
- (symulator)                     Go                     Python, FastAPI      Vue 3
-                                                              │
-                                                    price-alerts-infra
-                                                    Terraform, k3s na AWS
+ Parkiet ──► Kafka: exchange.events ──► quote-stream-kafka ──► price-alerts-api ◄── price-alerts-web
+ (transakcje; albo symulator → quotes)  Go                     Python, FastAPI      Vue 3
+                                                                     │
+                                                           price-alerts-infra
+                                                           Terraform, k3s na AWS
 ```
 
 | Repozytorium | Rola | Stack | Demo |
 |---|---|---|---|
 | [parkiet-exchange](https://github.com/Sitkowski01/parkiet-exchange) | giełda: arkusz zleceń, kojarzenie cena–czas, transakcje do Kafki | Java 21, Spring Boot 4, PostgreSQL, Kafka | [terminal](https://sitekmikolaj.pl/parkiet/) |
 | [broker-ledger](https://github.com/Sitkowski01/broker-ledger) **(to repo)** | dom maklerski: księga podwójnego zapisu, zlecenia jako saga, rozliczenie | C# / .NET 10, PostgreSQL, Kafka, Angular 22 | [aplikacja](https://sitekmikolaj.pl/broker/) |
-| [quote-stream-kafka](https://github.com/Sitkowski01/quote-stream-kafka) | potok notowań z Kafki do serwisu alertów, DLQ, ręczne offsety | Go, Kafka | — |
+| [quote-stream-kafka](https://github.com/Sitkowski01/quote-stream-kafka) | transakcje Parkietu (albo symulator) z Kafki do serwisu alertów, DLQ, ręczne offsety | Go, Kafka | — |
 | [price-alerts-api](https://github.com/Sitkowski01/price-alerts-api) | alerty progowe na notowaniach, historia uruchomień | Python, FastAPI, PostgreSQL, Kubernetes | — |
 | [price-alerts-web](https://github.com/Sitkowski01/price-alerts-web) | klient alertów z taśmą notowań i wykresami | Vue 3, Pinia, TypeScript | — |
 | [price-alerts-infra](https://github.com/Sitkowski01/price-alerts-infra) | klaster pod serwis alertów | Terraform, AWS EC2, k3s | — |
