@@ -2,6 +2,7 @@ using System.Security.Claims;
 using BrokerLedger.Api.Accounts;
 using BrokerLedger.Api.Auth;
 using BrokerLedger.Api.Errors;
+using BrokerLedger.Api.Events;
 using BrokerLedger.Domain;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
@@ -79,6 +80,26 @@ public class UnitTests
         var ex = Assert.Throws<InvalidOperationException>(() => user.ClientId());
 
         Assert.Equal("authenticated user has no client id", ex.Message);
+    }
+
+    [Fact]
+    public void Principal_gives_back_the_token_expiry_and_without_it_is_a_bug()
+    {
+        var user = new ClaimsPrincipal(new ClaimsIdentity([new Claim("exp", "1791720000")], "test"));
+        var anonymous = new ClaimsPrincipal(new ClaimsIdentity([], "test"));
+
+        Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1791720000), user.ExpiresAt());
+        Assert.Equal("authenticated user has no token expiry",
+            Assert.Throws<InvalidOperationException>(() => anonymous.ExpiresAt()).Message);
+    }
+
+    [Fact]
+    public void Time_left_to_a_moment_is_never_negative()
+    {
+        var clock = new FixedClock(new DateTimeOffset(2026, 10, 11, 12, 0, 0, TimeSpan.Zero));
+
+        Assert.Equal(TimeSpan.FromMinutes(5), EventEndpoints.Until(clock.GetUtcNow().AddMinutes(5), clock));
+        Assert.Equal(TimeSpan.Zero, EventEndpoints.Until(clock.GetUtcNow().AddSeconds(-1), clock));
     }
 
     [Fact]

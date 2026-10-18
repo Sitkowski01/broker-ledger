@@ -36,15 +36,19 @@ internal static class EventEndpoints
         // front polaczy sie od nowa z aktualnym tokenem (albo wcale, jesli sesja sie skonczyla).
         var expiry = new CancellationTokenSource(Until(http.User.ExpiresAt(), clock), clock);
         var stream = CancellationTokenSource.CreateLinkedTokenSource(ct, expiry.Token);
+        // Stryker disable Statement : samo zwolnienie zasobow po odpowiedzi, bez wplywu na to, co dostaje klient
         http.Response.RegisterForDispose(expiry);
         http.Response.RegisterForDispose(stream);
+        // Stryker restore Statement
         var items = ItemsAsync(events.SubscribeAsync(http.User.ClientId(), stream.Token), options.Value.Heartbeat, stream.Token);
         return TypedResults.ServerSentEvents(CountedAsync(EndWhenExpiredAsync(items, expiry.Token, ct), metrics, ct));
     }
 
-    private static TimeSpan Until(DateTimeOffset moment, TimeProvider clock)
+    /// <summary>Ile zostalo do chwili; nigdy mniej niz zero (ujemny czas CancellationTokenSource odrzuca).</summary>
+    internal static TimeSpan Until(DateTimeOffset moment, TimeProvider clock)
     {
         var left = moment - clock.GetUtcNow();
+        // Stryker disable once Equality : przy zerze obie galezie daja zero
         return left > TimeSpan.Zero ? left : TimeSpan.Zero;
     }
 

@@ -1,3 +1,4 @@
+using System.Net.ServerSentEvents;
 using BrokerLedger.Api.Events;
 using BrokerLedger.Domain;
 
@@ -73,6 +74,47 @@ public class EventItemsTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => next.WaitAsync(Wait));
         Assert.False(source.DisposedWhileWaiting);
         await items.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Token_expiry_ends_the_stream_quietly_after_what_was_already_sent()
+    {
+        using var expired = new CancellationTokenSource();
+        await expired.CancelAsync();
+
+        var names = await NamesAsync(EventEndpoints.EndWhenExpiredAsync(LedgerThenCancelled(), expired.Token, CancellationToken.None));
+
+        Assert.Equal(["ledger"], names);
+    }
+
+    [Fact]
+    public async Task Disconnect_is_not_mistaken_for_token_expiry()
+    {
+        using var expired = new CancellationTokenSource();
+        using var disconnect = new CancellationTokenSource();
+        await expired.CancelAsync();
+        await disconnect.CancelAsync();
+
+        // Klient sie rozlaczyl: to nie jest zwykly koniec strumienia, tylko przerwanie — tak jak bez wygasniecia.
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            NamesAsync(EventEndpoints.EndWhenExpiredAsync(LedgerThenCancelled(), expired.Token, disconnect.Token)));
+    }
+
+    private static async Task<List<string>> NamesAsync(IAsyncEnumerable<SseItem<object>> items)
+    {
+        var names = new List<string>();
+        await foreach (var item in items)
+        {
+            names.Add(item.EventType!);
+        }
+        return names;
+    }
+
+    private static async IAsyncEnumerable<SseItem<object>> LedgerThenCancelled()
+    {
+        yield return new SseItem<object>(new { }, "ledger");
+        await Task.Yield();
+        throw new OperationCanceledException();
     }
 
     /// <summary>Zrodlo zdarzen sterowane z testu; z <see cref="Endless"/> po zdarzeniach czeka na <see cref="Finish"/>.</summary>
