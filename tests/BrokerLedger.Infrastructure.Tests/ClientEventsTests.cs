@@ -135,7 +135,7 @@ public sealed class ClientEventsTests(PostgresFixture postgres) : IAsyncLifetime
 
         _events.Dispatch(Ledger(_client));
         Assert.True(await second.MoveNextAsync().AsTask().WaitAsync(Wait));
-        Assert.Equal(1, _events.SubscribedClients);
+        Assert.Equal(1, _events.Subscriptions);
     }
 
     [Fact]
@@ -144,13 +144,13 @@ public sealed class ClientEventsTests(PostgresFixture postgres) : IAsyncLifetime
         using var tab = new CancellationTokenSource();
         var events = _events.SubscribeAsync(_client, tab.Token).GetAsyncEnumerator(tab.Token);
         var next = events.MoveNextAsync().AsTask();
-        Assert.Equal(1, _events.SubscribedClients);
+        Assert.Equal(1, _events.Subscriptions);
 
         await tab.CancelAsync();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => next);
         await events.DisposeAsync();
 
-        Assert.Equal(0, _events.SubscribedClients);
+        Assert.Equal(0, _events.Subscriptions);
     }
 
     [Fact]

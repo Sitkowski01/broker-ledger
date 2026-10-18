@@ -30,14 +30,14 @@ internal sealed partial class PostgresClientEvents(ClientEventsSettings settings
     /// <summary>Ile razy nasluch sie polaczyl — testy czekaja na pierwsze polaczenie.</summary>
     public int Connections { get; private set; }
 
-    /// <summary>Ilu klientow ma otwarta subskrypcje — testy sprawdzaja, ze zamknieta nie zostaje w pamieci.</summary>
-    internal int SubscribedClients
+    /// <summary>Ile subskrypcji jest otwartych (wszyscy klienci) — testy sprawdzaja, ze zamknieta nie zostaje w pamieci.</summary>
+    internal int Subscriptions
     {
         get
         {
             lock (_gate)
             {
-                return _subscribers.Count;
+                return _subscribers.Values.Sum(list => list.Count);
             }
         }
     }
@@ -90,11 +90,12 @@ internal sealed partial class PostgresClientEvents(ClientEventsSettings settings
             {
                 await ListenAsync(stoppingToken);
             }
+            // Stryker disable Block,Statement : bez return petla i tak konczy sie na warunku while
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
-                // Stryker disable once Statement : bez return petla i tak konczy sie na warunku while
                 return;
             }
+            // Stryker restore Block,Statement
             catch (Exception e)
             {
                 // Baza na chwile niedostepna nie moze zatrzymac aplikacji — wyjatek z BackgroundService by to zrobil.
