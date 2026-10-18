@@ -33,7 +33,7 @@ z tymi samymi zasadami (blokady, prowizja, saga, księga), ceny nagrane z sesji 
   Server-Sent Events. Działa przy kilku instancjach API; po przerwie w połączeniu klient dostaje `resync`.
 - **Front w Angularze 22** (sygnały, bez zone.js) — Pulpit z wykresem wyniku bez wpłat, Zlecenia z blokadą liczoną przed
   kliknięciem i osią sagi, Księga z dokumentami Wn/Ma i kontem T. **Tryb demo bez serwera**: `cd web && npm run demo`.
-- **Testy** — backend 620 (jednostkowe, własności FsCheck, architektury, integracyjne na prawdziwym PostgreSQL i Kafce,
+- **Testy** — backend 625 (jednostkowe, własności FsCheck, architektury, integracyjne na prawdziwym PostgreSQL i Kafce,
   e2e po HTTP), front 241 (Vitest) + e2e w przeglądarce (Playwright); testy mutacyjne w CI na czterech warstwach
   (domena, baza, API, logika frontu 83%).
 
