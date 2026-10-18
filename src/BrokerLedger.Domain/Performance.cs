@@ -24,6 +24,7 @@ public static class Performance
     /// mapowania IANA, wiec jest tez nazwa windowsowa.
     /// </summary>
     public static readonly TimeZoneInfo ExchangeZone =
+        // Stryker disable once String : testy i CI dzialaja na Linuksie, gdzie strefa IANA jest zawsze; nazwa windowsowa to zapas
         TimeZoneInfo.TryFindSystemTimeZoneById("Europe/Warsaw", out var iana) ? iana
         : TimeZoneInfo.FindSystemTimeZoneById("Central European Standard Time");
 
@@ -33,6 +34,7 @@ public static class Performance
     public static IReadOnlyList<PerformancePoint> Sample(
         IEnumerable<HistoryEntry> entries, IReadOnlyList<DateTimeOffset> times, Func<string, int, decimal?> priceAt)
     {
+        // Stryker disable once Statement : bez tego OrderBy nizej rzuca ten sam ArgumentNullException
         ArgumentNullException.ThrowIfNull(entries);
         ArgumentNullException.ThrowIfNull(times);
         ArgumentNullException.ThrowIfNull(priceAt);
@@ -72,6 +74,7 @@ public static class Performance
     /// </summary>
     public static IReadOnlyList<DateTimeOffset> DailyTimes(DateTimeOffset from, DateTimeOffset now, TimeZoneInfo zone)
     {
+        // Stryker disable once Statement : bez tego TimeZoneInfo.ConvertTime nizej rzuca ten sam ArgumentNullException
         ArgumentNullException.ThrowIfNull(zone);
         var times = new List<DateTimeOffset>();
         var day = TimeZoneInfo.ConvertTime(from, zone).Date;

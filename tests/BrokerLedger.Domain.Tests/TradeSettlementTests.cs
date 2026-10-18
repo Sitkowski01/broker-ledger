@@ -161,6 +161,37 @@ public class TradeSettlementTests
         Assert.Equal((2L, 0L), ((await ReadAsync(settled)).Execution.Quantity, (await ReadAsync(newer)).Execution.Quantity));
     }
 
+    /// <summary>Zlecenie zapisane przed kolumna przebiegu: bez runId pasuje do zdarzen kazdego przebiegu.</summary>
+    private void ForgetRun(Order o) => _orders.Put(Order.Restore(o.Id, o.Client, o.ClientKey, o.Request, o.BlockedAmount,
+        o.Status, o.ExchangeOrderId, exchangeRunId: null, o.RejectionReason, o.FundsBlocked, o.FundsReleased, o.SubmitAttempts,
+        o.Version, o.Execution));
+
+    [Fact]
+    public async Task Repeat_prefers_the_order_that_settled_it_over_an_open_order_without_a_run()
+    {
+        var settled = await AcceptedAsync(7, quantity: 5, key: "settled");
+        await _settlement.SettleAsync(Trade(1, 99, 7, 2));
+        var legacy = await AcceptedAsync(7, quantity: 5, key: "legacy");
+        ForgetRun(legacy);
+
+        await _settlement.SettleAsync(Trade(1, 99, 7, 2));
+
+        Assert.Equal((2L, 0L), ((await ReadAsync(settled)).Execution.Quantity, (await ReadAsync(legacy)).Execution.Quantity));
+    }
+
+    [Fact]
+    public async Task Finished_order_without_a_run_does_not_take_an_event_it_never_saw()
+    {
+        var old = await AcceptedAsync(7, quantity: 1, key: "old");
+        ForgetRun(old);
+        await _settlement.SettleAsync(Trade(1, 99, 7, 1));
+
+        var outcome = await _settlement.SettleAsync(
+            new ExchangeEvent.Trade("CDR", new EventPosition(2, 1), 99, 7, OrderSide.Buy, 250m, 1));
+
+        Assert.Equal((SettleOutcome.NotOurs, 1L), (outcome, (await ReadAsync(old)).Execution.Quantity));
+    }
+
     [Fact]
     public async Task Repeated_event_changes_nothing()
     {

@@ -69,6 +69,22 @@ public class PerformanceTests
         Assert.Equal([(0m, 0m), (0m, 0m)], points.Select(p => (p.Value, p.Invested)));
     }
 
+    [Fact]
+    public void A_document_moving_two_companies_is_a_trade_not_a_withdrawal()
+    {
+        Post(JournalEntries.Deposit(_client, Money.Pln(2000m)), 0);
+        Post(JournalEntries.Block(_client, Pln, 2000m), 1);
+        // Jeden dokument rusza dwie spolki naraz — liczy sie, ze akcje sie ruszyly, nie ile linii akcji ma dokument.
+        var basket = JournalEntries.Purchase(_client, "CDR", 5, 1000m, 0m).Postings
+            .Concat(JournalEntries.Purchase(_client, "PKN", 10, 1000m, 0m).Postings)
+            .Where(p => p.Account.Client == _client).ToList();
+        _history.Add(new HistoryEntry(Guid.NewGuid(), _history.Count + 1, "basket", Start.AddHours(2), basket));
+
+        var point = Assert.Single(Sample((symbol, _) => symbol == "CDR" ? 200m : 100m, 3));
+
+        Assert.Equal((2000m, 2000m, 0m), (point.Value, point.Invested, point.Result));
+    }
+
     [Property]
     public void Only_deposits_and_withdrawals_never_make_a_result(PositiveInt[] deposits, PositiveInt[] withdrawals)
     {
@@ -96,6 +112,16 @@ public class PerformanceTests
             new DateTimeOffset(2026, 10, 15, 21, 59, 59, TimeSpan.Zero).AddTicks(9_999_999),
             new DateTimeOffset(2026, 10, 16, 12, 0, 0, TimeSpan.Zero),
         ], times);
+    }
+
+    [Fact]
+    public void Now_exactly_at_the_end_of_a_day_is_one_sample_not_two()
+    {
+        var endOfDay = new DateTimeOffset(2026, 10, 14, 21, 59, 59, TimeSpan.Zero).AddTicks(9_999_999);
+
+        var times = Performance.DailyTimes(new DateTimeOffset(2026, 10, 14, 10, 0, 0, TimeSpan.Zero), endOfDay, Warsaw);
+
+        Assert.Equal([endOfDay], times);
     }
 
     [Fact]
