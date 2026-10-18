@@ -12,6 +12,11 @@ klient ──► broker-ledger ──zlecenie──► Parkiet (giełda) ──t
                └──────────────── rozliczenie ◄───────────────────────────┘
 ```
 
+**[Demo aplikacji →](https://sitekmikolaj.pl/broker/)** — cały front w przeglądarce, bez serwera: symulator brokera
+z tymi samymi zasadami (blokady, prowizja, saga, księga), ceny nagrane z sesji Parkietu. Dowolny e-mail i hasło (min. 8 znaków)
+([jak to działa](#front-angular)). Pełny system z prawdziwą giełdą: `docker compose --profile app up --build`
+([Uruchomienie](#uruchomienie)).
+
 ## W 30 sekund
 
 - **Księga podwójnego zapisu** — każda operacja to dokument Wn = Ma, osobno w złotówkach i w akcjach. Saldo to suma
@@ -34,7 +39,7 @@ klient ──► broker-ledger ──zlecenie──► Parkiet (giełda) ──t
 
 C# / .NET 10, ASP.NET Core (minimal API, JWT, rate limiting, SSE), EF Core + PostgreSQL, Kafka (Confluent.Kafka), xUnit, FsCheck, Testcontainers, Stryker.NET · Angular 22, RxJS, Vitest, fast-check, Playwright, StrykerJS.
 
-![Pulpit: wartość rachunku, wynik bez wpłat, przelew, portfel i rozliczenia na żywo](docs/pulpit.png)
+[![Pulpit: wartość rachunku, wynik bez wpłat, przelew, portfel i rozliczenia na żywo](docs/pulpit.png)](https://sitekmikolaj.pl/broker/)
 
 <details>
 <summary><b>In English</b></summary>
@@ -459,6 +464,37 @@ E2E_LIVE=1 npm run e2e       # + prawdziwe API (8091) z PostgreSQL, Kafką i gie
 
 Na Windowsie z zainstalowanym Visual Studio 2022 Stryker bierze jego starszy MSBuild, który nie zna
 .NET 10 — wtedy `dotnet stryker --msbuild-path "C:/Program Files/dotnet/sdk/<wersja>/MSBuild.dll"`.
+
+## Ekosystem
+
+To repozytorium jest częścią zestawu projektów wokół giełdy. Każdy działa i testuje się
+osobno, a razem tworzą dwa przepływy: **handel** (broker ↔ giełda) i **alerty cenowe**.
+
+```
+HANDEL
+                 ┌──────────── zlecenie (REST, clientOrderId) ────────────┐
+                 │                                                        ▼
+ klient ──► broker-ledger                                              Parkiet
+            .NET 10 + Angular                                          Java 21
+                 ▲                                                        │
+                 └──── transakcje (Kafka: exchange.events) ◄──────────────┘
+
+ALERTY CENOWE
+ notowania ──► Kafka: quotes ──► quote-stream-kafka ──► price-alerts-api ◄── price-alerts-web
+ (symulator)                     Go                     Python, FastAPI      Vue 3
+                                                              │
+                                                    price-alerts-infra
+                                                    Terraform, k3s na AWS
+```
+
+| Repozytorium | Rola | Stack | Demo |
+|---|---|---|---|
+| [parkiet-exchange](https://github.com/Sitkowski01/parkiet-exchange) | giełda: arkusz zleceń, kojarzenie cena–czas, transakcje do Kafki | Java 21, Spring Boot 4, PostgreSQL, Kafka | [terminal](https://sitekmikolaj.pl/parkiet/) |
+| [broker-ledger](https://github.com/Sitkowski01/broker-ledger) **(to repo)** | dom maklerski: księga podwójnego zapisu, zlecenia jako saga, rozliczenie | C# / .NET 10, PostgreSQL, Kafka, Angular 22 | [aplikacja](https://sitekmikolaj.pl/broker/) |
+| [quote-stream-kafka](https://github.com/Sitkowski01/quote-stream-kafka) | potok notowań z Kafki do serwisu alertów, DLQ, ręczne offsety | Go, Kafka | — |
+| [price-alerts-api](https://github.com/Sitkowski01/price-alerts-api) | alerty progowe na notowaniach, historia uruchomień | Python, FastAPI, PostgreSQL, Kubernetes | — |
+| [price-alerts-web](https://github.com/Sitkowski01/price-alerts-web) | klient alertów z taśmą notowań i wykresami | Vue 3, Pinia, TypeScript | — |
+| [price-alerts-infra](https://github.com/Sitkowski01/price-alerts-infra) | klaster pod serwis alertów | Terraform, AWS EC2, k3s | — |
 
 ## Licencja
 
