@@ -23,6 +23,20 @@ public class SettlementWorkerTests
     }
 
     [Fact]
+    public async Task Pass_counts_settled_events_in_the_metric()
+    {
+        MetricTotals? metrics = null;
+        var worker = Worker(new Inbox(Trade(1), Trade(2)), withServices: services => metrics = new MetricTotals(services));
+
+        await worker.RunOnceAsync();
+
+        using (metrics)
+        {
+            Assert.Equal(2, metrics!["broker.settled_events"]);
+        }
+    }
+
+    [Fact]
     public async Task Failed_event_is_counted_out_and_its_symbol_waits()
     {
         var inbox = new Inbox(Trade(1), Trade(2, "PKN"));
@@ -117,7 +131,7 @@ public class SettlementWorkerTests
         new ExchangeEvent.Trade(symbol, new EventPosition(1, sequence), 1, 2, OrderSide.Buy, 10m, 1);
 
     private static SettlementWorker Worker(Inbox inbox, int batch = 50, bool enabled = true, TimeSpan? interval = null,
-        IOrderRepository? orders = null, ILogger<SettlementWorker>? logger = null)
+        IOrderRepository? orders = null, ILogger<SettlementWorker>? logger = null, Action<IServiceProvider>? withServices = null)
     {
         var services = new ServiceCollection()
             .AddSingleton<IExchangeInbox>(inbox)
@@ -128,6 +142,7 @@ public class SettlementWorkerTests
             .AddMetrics()
             .AddSingleton<BrokerMetrics>()
             .BuildServiceProvider();
+        withServices?.Invoke(services);
         var options = Options.Create(new SettlementOptions { BatchSize = batch, Enabled = enabled, Interval = interval ?? TimeSpan.FromSeconds(1) });
         return new SettlementWorker(services.GetRequiredService<IServiceScopeFactory>(), options, TimeProvider.System,
             logger ?? NullLogger<SettlementWorker>.Instance);

@@ -19,6 +19,8 @@ public sealed class EventStreamTests(BrokerApi api)
         using var response = await http.GetAsync(new Uri("/api/me/events", UriKind.Relative), HttpCompletionOption.ResponseHeadersRead, cts.Token);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("text/event-stream", response.Content.Headers.ContentType?.MediaType);
+        // Proxy (nginx w obrazie frontu) nie moze zbierac sygnalow w paczki.
+        Assert.Equal("no", Assert.Single(response.Headers.GetValues("X-Accel-Buffering")));
         using var reader = new StreamReader(await response.Content.ReadAsStreamAsync(cts.Token));
 
         Assert.Equal(("ready", "{}"), await NextEventAsync(reader, cts.Token));
@@ -51,15 +53,26 @@ public sealed class EventStreamTests(BrokerApi api)
     {
         using var factory = api.With(("Events:Heartbeat", "00:00:00.200"));
         using var http = await Clients.RegisterAndLoginAsync(factory);
+        using var streams = new MetricTotals(factory.Services);
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        using var response = await http.GetAsync(new Uri("/api/me/events", UriKind.Relative), HttpCompletionOption.ResponseHeadersRead, cts.Token);
-        using var reader = new StreamReader(await response.Content.ReadAsStreamAsync(cts.Token));
+        var response = await http.GetAsync(new Uri("/api/me/events", UriKind.Relative), HttpCompletionOption.ResponseHeadersRead, cts.Token);
+        var reader = new StreamReader(await response.Content.ReadAsStreamAsync(cts.Token));
 
         Assert.Equal("ready", (await NextEventAsync(reader, cts.Token)).Event);
         Assert.Equal("ping", (await NextEventAsync(reader, cts.Token)).Event);
         // Otwarty strumien widac w metrykach (licznik w gore przy polaczeniu, w dol przy rozlaczeniu).
         var metrics = await http.GetStringAsync(new Uri("/metrics", UriKind.Relative), cts.Token);
         Assert.Matches("""broker_event_streams\{[^}]*\} [1-9]""", metrics);
+        Assert.Equal(1, streams["broker.event_streams"]);
+
+        reader.Dispose();
+        response.Dispose();
+        var deadline = DateTime.UtcNow + Wait;
+        while (streams["broker.event_streams"] != 0)
+        {
+            Assert.True(DateTime.UtcNow < deadline, "stream was never counted as closed");
+            await Task.Delay(50, cts.Token);
+        }
     }
 
     [Fact]

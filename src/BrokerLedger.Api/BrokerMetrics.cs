@@ -25,13 +25,7 @@ internal sealed class BrokerMetrics
     public void OrderPlaced(string side, string status) =>
         _orders.Add(1, new KeyValuePair<string, object?>("side", side), new KeyValuePair<string, object?>("status", status));
 
-    public void Settled(int events)
-    {
-        if (events > 0)
-        {
-            _settled.Add(events);
-        }
-    }
+    public void Settled(int events) => _settled.Add(events);
 
     public void StreamOpened() => _streams.Add(1);
 
