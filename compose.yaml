@@ -39,8 +39,9 @@ services:
       ExchangeEvents__BootstrapServers: kafka:19092
       # Adres klienta (limit logowan na IP) z X-Forwarded-For — ale tylko od naszego nginx.
       ReverseProxy__KnownProxies__0: 172.28.0.10
+    # Tylko z tego komputera: /metrics i /docs nie maja autoryzacji, a z zewnatrz API idzie przez nginx (/api/).
     ports:
-      - "8091:8080"
+      - "127.0.0.1:8091:8080"
     networks: [default]
 
   web:

@@ -33,7 +33,7 @@ z tymi samymi zasadami (blokady, prowizja, saga, księga), ceny nagrane z sesji 
   Server-Sent Events. Działa przy kilku instancjach API; po przerwie w połączeniu klient dostaje `resync`.
 - **Front w Angularze 22** (sygnały, bez zone.js) — Pulpit z wykresem wyniku bez wpłat, Zlecenia z blokadą liczoną przed
   kliknięciem i osią sagi, Księga z dokumentami Wn/Ma i kontem T. **Tryb demo bez serwera**: `cd web && npm run demo`.
-- **Testy** — backend 597 (jednostkowe, własności FsCheck, architektury, integracyjne na prawdziwym PostgreSQL i Kafce,
+- **Testy** — backend 620 (jednostkowe, własności FsCheck, architektury, integracyjne na prawdziwym PostgreSQL i Kafce,
   e2e po HTTP), front 241 (Vitest) + e2e w przeglądarce (Playwright); testy mutacyjne w CI na czterech warstwach
   (domena, baza, API, logika frontu 83%).
 
@@ -160,6 +160,8 @@ wypłata 100 zł        Wn ClientAvailable:PLN   100   │  Ma Bank:PLN         
 | `GET` | `/api/me/portfolio` | pozycje, średnia cena, zysk/strata, wartość w walutach po kursach NBP — [niżej](#portfel-i-kursy-nbp) |
 | `GET` | `/api/me/performance?days=30` | wynik bez wpłat i wypłat (`days` = 7 albo 30): punkt na koniec każdego dnia i „teraz” — [niżej](#wynik-w-czasie) |
 | `GET` | `/api/me/events` | Server-Sent Events: `order`, `ledger`, `resync`, w ciszy `ping` — [niżej](#na-żywo-sse) |
+| `POST` | `/api/me/orders` | złożenie zlecenia z `Idempotency-Key` — [saga niżej](#zlecenia-na-giełdę-saga) |
+| `DELETE` | `/api/me/orders/{id}` | prośba o anulowanie; resztę blokady zwalnia zdarzenie giełdy |
 | `GET` | `/api/me/orders`, `/api/me/orders/{id}` | zlecenia klienta (z `fundsBlocked` i `fundsReleased` — kroki sagi) |
 | `GET` | `/api/market/quotes` | ostatnie ceny spółek z transakcji giełdy |
 
@@ -183,6 +185,8 @@ wypłata 100 zł        Wn ClientAvailable:PLN   100   │  Ma Bank:PLN         
   albo dodatnich limitów → `OptionsValidationException` przy uruchomieniu — **zanim** migracje dotkną bazy.
 - `/health` sprawdza połączenie z bazą — bez niej aplikacja nic nie zaksięguje.
 - **Dokumentacja**: `/openapi/v1.json` (wbudowane OpenAPI z ASP.NET Core, ze schematem Bearer) i `/docs` (Swagger UI).
+- `/metrics`, `/openapi/v1.json` i `/docs` nie przechodzą przez nginx frontu (ten wystawia tylko `/api/`), a compose
+  publikuje port API wyłącznie na `127.0.0.1` — Prometheus czyta metryki z sieci wewnętrznej.
 - **Metryki** (`/metrics`, format Prometheusa przez OpenTelemetry): czasy żądań HTTP oraz `broker_orders_total`
   (strona i stan po odpowiedzi giełdy), `broker_settled_events_total`, `broker_event_streams` (otwarte strumienie SSE).
   Eksporter Prometheusa dla OpenTelemetry jest w .NET wciąż w wersji beta — reszta pakietów jest stabilna.
@@ -203,14 +207,17 @@ POST /api/me/orders  {"symbol":"CDR","side":"buy","type":"limit","limitPrice":"2
 
 - **Każdy krok jest idempotentny** — w księdze klucz, na giełdzie `clientOrderId` (Parkiet zwraca pierwotny
   wynik zamiast składać zlecenie drugi raz). Awaria w dowolnym miejscu jest do dokończenia: **reconciler**
-  co kilka sekund bierze zlecenia `pending` / `unknown` i odrzucone z niezwolnioną blokadą i powtarza sagę.
+  co kilka sekund bierze zlecenia `pending` / `unknown` oraz zakończone (odrzucone, wykonane, anulowane) z niezwolnioną
+  blokadą i powtarza sagę.
 - **Najpierw status, potem pieniądze.** Status zlecenia jest zapisywany przed zwolnieniem blokady — po awarii
   nigdy nie zwolnimy środków zlecenia, które mogło trafić na giełdę.
 - **Licznik prób zapisany przed wysłaniem.** 503 jest odmową tylko przy pierwszej próbie — po timeoucie, awarii
   albo rozłączonym kliencie wcześniejsza próba mogła wciąż czekać w kolejce giełdy i wykonać się później,
   więc zwolnienie środków byłoby błędem. Ten sam zapis działa jak dzierżawa: gdy zlecenie chcą wysłać naraz
   żądanie klienta i reconciler, drugi przegra wyścig o wersję i niczego nie wyśle.
-- **409 z giełdy** (`clientOrderId` zajęty innym zleceniem) nie zwalnia środków — zostaje do wyjaśnienia.
+- **409 z giełdy** (`clientOrderId` zajęty innym zleceniem) nie zwalnia środków — zostaje do wyjaśnienia. Takie zlecenie
+  wstrzymuje rozliczanie swojej spółki (każda transakcja może być jego), więc reconciler co 10 prób ostrzega w logu,
+  które zlecenie i która spółka czekają — wyjaśnienie zostaje dla człowieka.
 - **Kupno PKC nie przechodzi** — bez limitu ceny nie wiadomo, ile zablokować. Sprzedaż PKC blokuje akcje.
 - **Prowizja** 0,39%, min. 3 zł, w górę do grosza; przy kupnie blokowana razem z wartością.
 - **Blokada optymistyczna** (wersja zlecenia): żądanie klienta i reconciler nie nadpiszą sobie stanu.
@@ -272,6 +279,11 @@ zwolnienie reszty
   przebiegu już nie dojdzie. Ograniczenia: zamknięcie czeka na transakcję albo anulowanie na tej spółce (wejście
   zlecenia do arkusza broker w Kafce pomija); numery przebiegów muszą rosnąć, więc bazy
   Parkietu nie czyści się osobno od bazy brokera; zlecenia sprzed zapisu przebiegu nie są zamykane automatycznie.
+- **Czas transakcji z giełdy.** Skrzynka zapisuje obok czasu odbioru `occurred_at` z Parkietu — broker nadrabiający
+  przerwę dostaje stare transakcje teraz, a wykres wyniku pyta o cenę w chwili z przeszłości.
+- **Granica wartości dokumentu** (1 bln zł na zapis) dotyczy też sprzedaży, której wartość znamy dopiero z transakcji.
+  Sprzedaż za więcej (np. 1 mld akcji po ponad 1000 zł) zatrzymałaby spółkę jak każdy inny błąd rozliczenia — przy
+  limitach giełdy to przypadek teoretyczny, więc broker go nie dzieli na kilka dokumentów.
 - Bez `ExchangeEvents:BootstrapServers` broker działa bez Kafki (np. lokalnie bez giełdy) — zlecenia czekają.
 
 Zlecenie w API pokazuje wykonanie: `filledQuantity`, `filledValue`, `commission`, a status przechodzi
@@ -317,7 +329,9 @@ z Pulpitu.
 - Z księgi, bez osobnej tabeli wyników. Dokument, który zmienia gotówkę, a nie rusza akcji, to przepływ z zewnątrz
   (wpłata, wypłata) — zmienia „wpłacone”, nie wynik. Blokada pod zlecenie przesuwa między kontami klienta i sama znika.
 - Ceny w chwilach z przeszłości: jedno zapytanie `unnest(spółki) × unnest(chwile)`, a każda para to jeden skok po indeksie
-  `(symbol, received_at)` w skrzynce zdarzeń giełdy — bez czytania całej historii transakcji.
+  `(symbol, occurred_at)` w skrzynce zdarzeń giełdy (czas giełdy, nie odbioru) — bez czytania całej historii transakcji.
+- Wynik i portfel są liczone przy każdym żądaniu z całej historii klienta. Przy rachunkach demo to milisekundy; przy
+  latach historii następnym krokiem byłyby dzienne migawki portfela, od których liczy się tylko resztę.
 - Właściwość sprawdzana przez FsCheck: same wpłaty i wypłaty nigdy nie dają wyniku innego niż zero.
 
 ## Na żywo (SSE)
@@ -333,8 +347,12 @@ zmiana zlecenia / zapis w księdze ──trigger──► pg_notify('client_even
 - **Sygnał bez kwot** — tylko „u ciebie zmieniło się zlecenie X / księga”. Front po nim pyta API o stan, więc zgubiony albo
   podwójny sygnał niczego nie psuje. Po zerwaniu nasłuchu API wysyła wszystkim `resync` (sprawdzone testem z
   `pg_terminate_backend`), a front po ponownym połączeniu też czyta wszystko od nowa.
-- `GET /api/me/events`: najpierw `ready`, w ciszy `ping` co 15 s (proxy nie zamknie połączenia), wolny klient traci najstarsze
-  sygnały z bufora zamiast blokować pozostałych.
+- `GET /api/me/events`: najpierw `ready` (dopiero gdy strumień jest już zapisany na sygnały, więc nic między odczytem
+  ekranu a zapisem nie przepada), w ciszy `ping` co 15 s (proxy nie zamknie połączenia), wolny klient traci najstarsze
+  sygnały z bufora zamiast blokować pozostałych. Strumień kończy się razem z tokenem — front łączy się od nowa
+  z aktualnym, więc przechwycony token nie daje podglądu na zawsze.
+- Nasłuch `LISTEN` ma keepalive co 30 s: połączenie, które po cichu umarło (NAT, sieć bez RST), jest wykrywane,
+  a klienci dostają `resync` zamiast wiecznego „na żywo” bez sygnałów.
 
 ## Front (Angular)
 
