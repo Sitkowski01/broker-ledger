@@ -49,6 +49,23 @@ public sealed class EventStreamTests(BrokerApi api)
     }
 
     [Fact]
+    public async Task Stream_ends_when_the_token_expires()
+    {
+        using var factory = api.With(("Jwt:Lifetime", "00:00:02"), ("Events:Heartbeat", "00:00:00.200"));
+        using var http = await Clients.RegisterAndLoginAsync(factory);
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        using var response = await http.GetAsync(new Uri("/api/me/events", UriKind.Relative), HttpCompletionOption.ResponseHeadersRead, cts.Token);
+        using var reader = new StreamReader(await response.Content.ReadAsStreamAsync(cts.Token));
+
+        Assert.Equal(("ready", "{}"), await NextEventAsync(reader, cts.Token));
+        // Pingi podtrzymuja polaczenie, ale po wygasnieciu tokenu serwer je zamyka — zwyczajnie, bez urwania w polowie.
+        while (await reader.ReadLineAsync(cts.Token) is not null)
+        {
+        }
+        Assert.False(cts.IsCancellationRequested);
+    }
+
+    [Fact]
     public async Task Quiet_stream_sends_a_ping()
     {
         using var factory = api.With(("Events:Heartbeat", "00:00:00.200"));

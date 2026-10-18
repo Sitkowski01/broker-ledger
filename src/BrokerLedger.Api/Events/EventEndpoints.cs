@@ -27,12 +27,49 @@ internal static class EventEndpoints
         return app;
     }
 
-    private static ServerSentEventsResult<object> Stream(
-        HttpContext http, IClientEvents events, IOptions<EventsOptions> options, BrokerMetrics metrics, CancellationToken ct)
+    private static ServerSentEventsResult<object> Stream(HttpContext http, IClientEvents events, IOptions<EventsOptions> options,
+        BrokerMetrics metrics, TimeProvider clock, CancellationToken ct)
     {
         // Bez buforowania po drodze (np. nginx), inaczej sygnaly przychodzilyby paczkami.
         http.Response.Headers["X-Accel-Buffering"] = "no";
-        return TypedResults.ServerSentEvents(CountedAsync(ItemsAsync(events.SubscribeAsync(http.User.ClientId(), ct), options.Value.Heartbeat, ct), metrics, ct));
+        // Token sprawdzany jest tylko przy otwarciu, a strumien z pingami zylby bez konca. Konczymy go razem z tokenem:
+        // front polaczy sie od nowa z aktualnym tokenem (albo wcale, jesli sesja sie skonczyla).
+        var expiry = new CancellationTokenSource(Until(http.User.ExpiresAt(), clock), clock);
+        var stream = CancellationTokenSource.CreateLinkedTokenSource(ct, expiry.Token);
+        http.Response.RegisterForDispose(expiry);
+        http.Response.RegisterForDispose(stream);
+        var items = ItemsAsync(events.SubscribeAsync(http.User.ClientId(), stream.Token), options.Value.Heartbeat, stream.Token);
+        return TypedResults.ServerSentEvents(CountedAsync(EndWhenExpiredAsync(items, expiry.Token, ct), metrics, ct));
+    }
+
+    private static TimeSpan Until(DateTimeOffset moment, TimeProvider clock)
+    {
+        var left = moment - clock.GetUtcNow();
+        return left > TimeSpan.Zero ? left : TimeSpan.Zero;
+    }
+
+    /// <summary>Wygasniecie tokenu to zwykly koniec strumienia, a nie blad w polowie odpowiedzi.</summary>
+    internal static async IAsyncEnumerable<SseItem<object>> EndWhenExpiredAsync(
+        IAsyncEnumerable<SseItem<object>> items, CancellationToken expired, [EnumeratorCancellation] CancellationToken ct)
+    {
+        await using var enumerator = items.GetAsyncEnumerator(ct);
+        while (true)
+        {
+            bool more;
+            try
+            {
+                more = await enumerator.MoveNextAsync();
+            }
+            catch (OperationCanceledException) when (expired.IsCancellationRequested && !ct.IsCancellationRequested)
+            {
+                more = false;
+            }
+            if (!more)
+            {
+                yield break;
+            }
+            yield return enumerator.Current;
+        }
     }
 
     /// <summary>Strumien liczony w metryce otwartych strumieni — od pierwszego zdarzenia do rozlaczenia.</summary>
@@ -57,11 +94,13 @@ internal static class EventEndpoints
     internal static async IAsyncEnumerable<SseItem<object>> ItemsAsync(
         IAsyncEnumerable<ClientEvent> source, TimeSpan heartbeat, [EnumeratorCancellation] CancellationToken ct)
     {
-        yield return new SseItem<object>(new { }, "ready");
         await using var events = source.GetAsyncEnumerator(ct);
+        // Subskrypcja powstaje przy pierwszym MoveNextAsync, wiec "ready" dopiero po nim. Inaczej zmiana miedzy
+        // odczytem ekranu a zapisaniem sie na sygnaly przepadlaby, a klient uwazalby sie za "na zywo".
         var next = events.MoveNextAsync().AsTask();
         try
         {
+            yield return new SseItem<object>(new { }, "ready");
             while (true)
             {
                 var winner = await Task.WhenAny(next, Task.Delay(heartbeat, ct));

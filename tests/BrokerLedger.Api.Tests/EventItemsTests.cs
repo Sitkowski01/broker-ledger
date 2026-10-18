@@ -28,6 +28,20 @@ public class EventItemsTests
     }
 
     [Fact]
+    public async Task Ready_comes_after_the_subscription_started()
+    {
+        var source = new ManualSource { Endless = true };
+        var items = EventEndpoints.ItemsAsync(source, Wait, CancellationToken.None).GetAsyncEnumerator();
+
+        Assert.True(await items.MoveNextAsync());
+
+        Assert.Equal("ready", items.Current.EventType);
+        Assert.True(source.Started);
+        source.Finish();
+        await items.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Stream_ends_when_the_source_ends()
     {
         var source = new ManualSource(new ClientEvent(Client, ClientEventKind.Ledger), new ClientEvent(Client, ClientEventKind.Resync));
@@ -71,12 +85,16 @@ public class EventItemsTests
 
         public bool DisposedWhileWaiting { get; private set; }
 
+        /// <summary>Czy ktos juz czytal — prawdziwe zrodlo zapisuje subskrypcje dopiero przy pierwszym czytaniu.</summary>
+        public bool Started { get; private set; }
+
         public ClientEvent Current { get; private set; } = null!;
 
         public IAsyncEnumerator<ClientEvent> GetAsyncEnumerator(CancellationToken cancellationToken = default) => this;
 
         public ValueTask<bool> MoveNextAsync()
         {
+            Started = true;
             if (_events.TryDequeue(out var next))
             {
                 Current = next;

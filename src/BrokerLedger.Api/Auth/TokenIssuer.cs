@@ -40,4 +40,10 @@ internal static class ClientClaims
         Guid.TryParse(user.FindFirstValue(JwtRegisteredClaimNames.Sub), out var id) && id != Guid.Empty
             ? new ClientId(id)
             : throw new InvalidOperationException("authenticated user has no client id");
+
+    /// <summary>Do kiedy wazny jest token (<c>exp</c>, sekundy od epoki) — kazdy wydany przez TokenIssuer go ma.</summary>
+    public static DateTimeOffset ExpiresAt(this ClaimsPrincipal user) =>
+        long.TryParse(user.FindFirstValue(JwtRegisteredClaimNames.Exp), out var seconds)
+            ? DateTimeOffset.FromUnixTimeSeconds(seconds)
+            : throw new InvalidOperationException("authenticated user has no token expiry");
 }
